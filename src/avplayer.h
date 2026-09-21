@@ -97,6 +97,7 @@ public:
 
     State state() const { return state_; }
     int errorStage() const { return errorStage_; }
+    int32_t errorCode() const { return errorCode_; }
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
 
@@ -104,6 +105,7 @@ private:
     SceAvPlayerHandle handle_ = nullptr;
     State state_ = State::Idle;
     int errorStage_ = 0;
+    int32_t errorCode_ = 0;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
 };

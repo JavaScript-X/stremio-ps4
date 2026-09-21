@@ -12,7 +12,7 @@ consoles. The project is currently at **M1: platform foundation**.
 
 The current hardware probe boots a native OpenOrbis application, initializes
 1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
-and can ask the PS4 AVPlayer to decode a frame from a legal H.264 test clip.
+and can ask the PS4 AVPlayer to decode a frame from Mozilla's CC0 H.264 test clip.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:

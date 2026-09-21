@@ -28,10 +28,12 @@ AvPlayerProbe::~AvPlayerProbe() {
 bool AvPlayerProbe::start(const char* url) {
     stop();
     errorStage_ = 0;
+    errorCode_ = 0;
     width_ = 0;
     height_ = 0;
 
-    if (sceSysmoduleLoadModule(ORBIS_SYSMODULE_AV_PLAYER) < 0) {
+    errorCode_ = sceSysmoduleLoadModule(ORBIS_SYSMODULE_AV_PLAYER);
+    if (errorCode_ < 0) {
         errorStage_ = 1;
         state_ = State::Failed;
         return false;
@@ -54,7 +56,8 @@ bool AvPlayerProbe::start(const char* url) {
         return false;
     }
 
-    if (sceAvPlayerAddSource(handle_, url) < 0) {
+    errorCode_ = sceAvPlayerAddSource(handle_, url);
+    if (errorCode_ < 0) {
         errorStage_ = 3;
         state_ = State::Failed;
         sceAvPlayerClose(handle_);

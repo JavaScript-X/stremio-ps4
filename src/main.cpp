@@ -36,8 +36,7 @@ constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
 constexpr const char* kLegalVideoUrl =
-    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/"
-    "ForBiggerBlazes.mp4";
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
 
 int networkPoolId = 0;
 int sslContextId = 0;
@@ -135,7 +134,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.05",
+        "StremioPS4/1.06",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -181,7 +180,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.05: AVPlayer frame test");
+    notify("Stremio PS4 1.06: AVPlayer frame test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -254,11 +253,14 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
             notify("Stremio PS4: opening legal H.264 test video...");
             avPlayerProbeFrames = 0;
-            if (!avPlayer.start(kLegalVideoUrl)) {
-                char result[96];
+            if (!initializeHttp()) {
+                notify("Stremio PS4: AVPlayer network initialization failed");
+            } else if (!avPlayer.start(kLegalVideoUrl)) {
+                char result[128];
                 snprintf(result, sizeof(result),
-                    "Stremio PS4: AVPlayer failed at stage %d",
-                    avPlayer.errorStage());
+                    "Stremio PS4: AVPlayer stage %d, code 0x%08x",
+                    avPlayer.errorStage(),
+                    static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
             }
         }
