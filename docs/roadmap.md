@@ -2,14 +2,14 @@
 
 ## M0 — hardware proof
 
-- Reproducible OpenOrbis build and package
-- Native 1080p double-buffered output
-- Diagnostic logging
-- Firmware 13.02 test report
+- [x] Reproducible OpenOrbis build and package
+- [x] Native 1080p double-buffered output
+- [x] Diagnostic notifications and clean home navigation
+- [x] Firmware 13.02 + HEN validation
 
 ## M1 — platform foundation
 
-- User service and DualShock 4 input
+- [x] User service and DualShock 4 initialization
 - Focus navigation and safe-area layout
 - Network initialization and HTTPS request probe
 - Persistent, non-secret settings
@@ -43,4 +43,3 @@
 - Settings and diagnostics UI
 - Performance, memory, and long-session testing
 - Signed release checksums and upgrade documentation
-

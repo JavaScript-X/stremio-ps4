@@ -1,5 +1,16 @@
 # M0 console test
 
+## Validated result
+
+M0 was validated on a jailbroken PS4 running firmware 13.02 with HEN. The
+package installed successfully, initialized the active controller, presented
+stable native 1920x1080 double-buffered output, remained responsive, and
+returned to the home screen with the Options button without crashing.
+
+Validated package version: `1.02`
+
+Validated source commit: `a2654f8`
+
 ## Goal
 
 Prove that the package launches, allocates two 1080p framebuffers, and presents
@@ -33,4 +44,3 @@ How the app was closed:
 Diagnostic output:
 Photo/video link (optional):
 ```
-
