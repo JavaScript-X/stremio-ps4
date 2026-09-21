@@ -133,7 +133,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.08",
+        "StremioPS4/1.09",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -179,7 +179,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.08: direct-memory AVPlayer test");
+    notify("Stremio PS4 1.09: event-driven AVPlayer test");
 
     const int pad = initializeController();
     notify(pad >= 0

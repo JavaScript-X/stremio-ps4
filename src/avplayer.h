@@ -75,13 +75,33 @@ struct SceAvPlayerFrameInfoEx {
     SceAvPlayerStreamDetailsEx details;
 };
 
+struct SceAvPlayerVideo {
+    uint32_t width;
+    uint32_t height;
+    float aspectRatio;
+    uint8_t languageCode[4];
+};
+
+union SceAvPlayerStreamDetails {
+    uint8_t reserved[16];
+    SceAvPlayerVideo video;
+};
+
+struct SceAvPlayerFrameInfo {
+    uint8_t* pData;
+    uint32_t reserved;
+    uint64_t timeStamp;
+    SceAvPlayerStreamDetails details;
+};
+
 SceAvPlayerHandle sceAvPlayerInit(SceAvPlayerInitData* data);
 int32_t sceAvPlayerAddSource(SceAvPlayerHandle handle, const char* filename);
 int32_t sceAvPlayerClose(SceAvPlayerHandle handle);
-bool sceAvPlayerGetVideoDataEx(
+bool sceAvPlayerGetVideoData(
     SceAvPlayerHandle handle,
-    SceAvPlayerFrameInfoEx* frameInfo);
+    SceAvPlayerFrameInfo* frameInfo);
 uint8_t sceAvPlayerIsActive(SceAvPlayerHandle handle);
+int32_t sceAvPlayerStart(SceAvPlayerHandle handle);
 int32_t sceAvPlayerStop(SceAvPlayerHandle handle);
 
 }  // extern "C"
@@ -108,4 +128,5 @@ private:
     int32_t errorCode_ = 0;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
+    bool started_ = false;
 };

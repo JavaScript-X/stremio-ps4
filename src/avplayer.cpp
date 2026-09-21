@@ -13,6 +13,11 @@ constexpr size_t kDirectMemoryAlignment = 0x200000;
 void* texturePool = nullptr;
 size_t texturePoolOffset = 0;
 off_t texturePoolDirectOffset = 0;
+volatile int32_t latestPlayerEvent = 0;
+
+void playerEvent(void*, int32_t eventId, int32_t, void*) {
+    latestPlayerEvent = eventId;
+}
 
 void* allocateAligned(void*, uint32_t alignment, uint32_t size) {
     if (alignment < sizeof(void*)) {
@@ -89,6 +94,8 @@ bool AvPlayerProbe::start(const char* url) {
     errorCode_ = 0;
     width_ = 0;
     height_ = 0;
+    started_ = false;
+    latestPlayerEvent = 0;
 
     if (!initializeTexturePool()) {
         errorStage_ = 1;
@@ -109,9 +116,10 @@ bool AvPlayerProbe::start(const char* url) {
     init.memoryReplacement.deallocate = release;
     init.memoryReplacement.allocateTexture = allocateTexture;
     init.memoryReplacement.deallocateTexture = releaseTexture;
+    init.eventReplacement.eventCallback = playerEvent;
     init.basePriority = 160;
     init.numOutputVideoFrameBuffers = 4;
-    init.autoStart = 1;
+    init.autoStart = 0;
     init.defaultLanguage = "en";
 
     handle_ = sceAvPlayerInit(&init);
@@ -138,13 +146,27 @@ void AvPlayerProbe::update() {
     if (!handle_ || state_ == State::Failed || state_ == State::Passed) {
         return;
     }
+    constexpr int32_t kReadyEvent = 0x02;
+    if (!started_) {
+        if (latestPlayerEvent != kReadyEvent) {
+            return;
+        }
+        errorCode_ = sceAvPlayerStart(handle_);
+        if (errorCode_ < 0) {
+            errorStage_ = 5;
+            state_ = State::Failed;
+            return;
+        }
+        started_ = true;
+        state_ = State::Decoding;
+    }
+
     if (!sceAvPlayerIsActive(handle_)) {
         return;
     }
 
-    state_ = State::Decoding;
-    SceAvPlayerFrameInfoEx frame = {};
-    if (sceAvPlayerGetVideoDataEx(handle_, &frame) && frame.pData) {
+    SceAvPlayerFrameInfo frame = {};
+    if (sceAvPlayerGetVideoData(handle_, &frame) && frame.pData) {
         width_ = frame.details.video.width;
         height_ = frame.details.video.height;
         state_ = State::Passed;
@@ -158,4 +180,5 @@ void AvPlayerProbe::stop() {
         handle_ = nullptr;
     }
     state_ = State::Idle;
+    started_ = false;
 }
