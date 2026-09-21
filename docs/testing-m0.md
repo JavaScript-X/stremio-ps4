@@ -55,3 +55,14 @@ How the app was closed:
 Diagnostic output:
 Photo/video link (optional):
 ```
+
+## M1 AVPlayer validation
+
+Package version `1.10` was validated on the firmware 13.02 console. Pressing
+Square opened the packaged Mozilla CC0 MP4, completed AVPlayer's ready-event
+handshake, enabled the video stream, and retrieved a decoded H.264 frame. The
+reported output was `decoded frame 960x540` and appeared almost immediately.
+
+This validates package file access, MP4 demuxing, H.264 hardware decoding,
+GPU-visible decoder allocation, and decoded-frame retrieval. Displaying those
+NV12 frames and consuming decoded audio remain separate follow-up work.

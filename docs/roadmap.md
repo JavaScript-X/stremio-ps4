@@ -13,7 +13,7 @@
 - [x] Focus navigation and safe-area layout
 - [x] Network initialization and certificate-verified HTTPS request probe
 - Persistent, non-secret settings
-- [ ] Packaged CC0 MP4 hardware-decoder frame probe (console validation pending)
+- [x] Packaged CC0 MP4 H.264 hardware-decoder frame probe
 - Legal HLS playback test asset
 
 ## M2 — Stremio browsing

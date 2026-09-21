@@ -35,7 +35,7 @@ M1 controller test controls:
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
-| M1 | Controller input and HTTP/HLS playback proof | In progress |
+| M1 | Controller, HTTPS, and local H.264 decode proof | Validated on PS4 FW 13.02 |
 | M2 | Stremio login, catalogs, search and metadata | Planned |
 | M3 | Direct stream selection and playback | Planned |
 | M4 | Companion Stremio server integration | Planned |
