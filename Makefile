@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.01
+VERSION    := 1.02
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -11,6 +11,8 @@ TARGET     := stremio-ps4
 
 RIGHT_SPRX ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/about/right.sprx
 ICON0      ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/icon0.png
+LIBC_PRX   ?= $(TOOLCHAIN)/samples/graphics/sce_module/libc.prx
+FIOS2_PRX  ?= $(TOOLCHAIN)/samples/graphics/sce_module/libSceFios2.prx
 
 CC         := clang-18
 CXX        := clang++-18
@@ -18,7 +20,7 @@ LD         := ld.lld-18
 TOOLS      := $(TOOLCHAIN)/bin/linux
 
 LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule \
-	-lScePad -lSceUserService
+	-lScePad -lSceUserService -lSceSysUtil -lSceSystemService
 CFLAGS     := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \
@@ -46,8 +48,10 @@ check:
 	@test -f "$(COMMONDIR)/graphics.cpp" || (echo "OpenOrbis common graphics source not found"; exit 1)
 	@test -f "$(RIGHT_SPRX)" || (echo "right.sprx not found; set RIGHT_SPRX"; exit 1)
 	@test -f "$(ICON0)" || (echo "icon0.png not found; set ICON0"; exit 1)
+	@test -f "$(LIBC_PRX)" || (echo "libc.prx not found; set LIBC_PRX"; exit 1)
+	@test -f "$(FIOS2_PRX)" || (echo "libSceFios2.prx not found; set FIOS2_PRX"; exit 1)
 
-$(BUILDDIR) $(DISTDIR) $(BUILDDIR)/sce_sys/about:
+$(BUILDDIR) $(DISTDIR) $(BUILDDIR)/sce_sys/about $(BUILDDIR)/sce_module:
 	mkdir -p $@
 
 $(BUILDDIR)/main.o: src/main.cpp | $(BUILDDIR)
@@ -69,6 +73,12 @@ $(BUILDDIR)/sce_sys/about/right.sprx: $(RIGHT_SPRX) | $(BUILDDIR)/sce_sys/about
 $(BUILDDIR)/sce_sys/icon0.png: $(ICON0) | $(BUILDDIR)/sce_sys/about
 	cp $< $@
 
+$(BUILDDIR)/sce_module/libc.prx: $(LIBC_PRX) | $(BUILDDIR)/sce_module
+	cp $< $@
+
+$(BUILDDIR)/sce_module/libSceFios2.prx: $(FIOS2_PRX) | $(BUILDDIR)/sce_module
+	cp $< $@
+
 $(BUILDDIR)/sce_sys/param.sfo: Makefile | $(BUILDDIR)/sce_sys/about
 	$(TOOLS)/PkgTool.Core sfo_new $@
 	$(TOOLS)/PkgTool.Core sfo_setentry $@ APP_TYPE --type Integer --maxsize 4 --value 1
@@ -83,10 +93,11 @@ $(BUILDDIR)/sce_sys/param.sfo: Makefile | $(BUILDDIR)/sce_sys/about
 	$(TOOLS)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
 
 $(BUILDDIR)/pkg.gp4: $(BUILDDIR)/eboot.bin $(BUILDDIR)/sce_sys/about/right.sprx \
-	$(BUILDDIR)/sce_sys/icon0.png $(BUILDDIR)/sce_sys/param.sfo
+	$(BUILDDIR)/sce_sys/icon0.png $(BUILDDIR)/sce_sys/param.sfo \
+	$(BUILDDIR)/sce_module/libc.prx $(BUILDDIR)/sce_module/libSceFios2.prx
 	cd $(BUILDDIR) && $(TOOLS)/create-gp4 -out pkg.gp4 \
 		--content-id=$(CONTENT_ID) \
-		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo"
+		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx"
 
 $(PACKAGE): $(BUILDDIR)/pkg.gp4 | $(DISTDIR)
 	$(TOOLS)/PkgTool.Core pkg_build $< $(DISTDIR)

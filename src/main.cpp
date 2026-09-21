@@ -3,6 +3,7 @@
 
 #include <orbis/libkernel.h>
 #include <orbis/Pad.h>
+#include <orbis/SystemService.h>
 #include <orbis/UserService.h>
 
 #include "graphics.h"
@@ -14,6 +15,10 @@ std::stringstream debugLogStream;
 // not provide its definition. The application owns the scene for its entire
 // process lifetime, so the default implementation is sufficient here.
 Scene2D::~Scene2D() = default;
+
+extern "C" int sceSysUtilSendSystemNotificationWithText(
+    int messageType,
+    const char* message);
 
 namespace {
 constexpr int kWidth = 1920;
@@ -47,42 +52,69 @@ void drawHardwareProbe(Scene2D& scene) {
     scene.DrawRectangle(370, 720, 1030, 28, cardMuted);
     scene.DrawRectangle(370, 786, 1180, 28, cardMuted);
 }
+
+void notify(const char* message) {
+    sceSysUtilSendSystemNotificationWithText(222, message);
+}
+
+int initializeController() {
+    OrbisUserServiceInitializeParams userParams = {};
+    userParams.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
+    int userId = -1;
+
+    sceUserServiceInitialize(&userParams);
+    if (sceUserServiceGetInitialUser(&userId) != 0 || scePadInit() != 0) {
+        return -1;
+    }
+
+    return scePadOpen(userId, 0, 0, nullptr);
+}
+
+bool optionsPressed(int pad) {
+    if (pad < 0) {
+        return false;
+    }
+
+    OrbisPadData padData = {};
+    return scePadReadState(pad, &padData) == 0 &&
+        (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS) != 0;
+}
 }  // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
+    notify("Stremio PS4 1.02: startup");
+
+    const int pad = initializeController();
+    notify(pad >= 0
+        ? "Stremio PS4: controller ready"
+        : "Stremio PS4: controller initialization failed");
 
     Scene2D scene(kWidth, kHeight, kPixelDepth);
     if (!scene.Init(kVideoMemory, kFrameBuffers)) {
         DEBUGLOG << "Video initialization failed";
-        sceKernelUsleep(3000000);
-        return 1;
+        notify("Stremio PS4: VIDEO INITIALIZATION FAILED");
+        for (;;) {
+            if (optionsPressed(pad)) {
+                sceSystemServiceNavigateToGoHome();
+                sceKernelUsleep(1000000);
+            }
+            sceKernelUsleep(16000);
+        }
     }
 
     DEBUGLOG << "Video initialized at 1920x1080; rendering hardware probe";
-
-    OrbisUserServiceInitializeParams userParams = {};
-    userParams.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
-    int userId = -1;
-    int pad = -1;
-
-    sceUserServiceInitialize(&userParams);
-    if (sceUserServiceGetInitialUser(&userId) == 0 && scePadInit() == 0) {
-        pad = scePadOpen(userId, 0, 0, nullptr);
-    }
+    notify("Stremio PS4: video ready");
 
     int frameId = 1;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
-        if (pad >= 0) {
-            OrbisPadData padData = {};
-            if (scePadReadState(pad, &padData) == 0 &&
-                (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-                DEBUGLOG << "Options pressed; exiting cleanly";
-                return 0;
-            }
+        if (optionsPressed(pad)) {
+            DEBUGLOG << "Options pressed; navigating home";
+            sceSystemServiceNavigateToGoHome();
+            sceKernelUsleep(1000000);
         }
 
         drawHardwareProbe(scene);

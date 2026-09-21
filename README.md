@@ -12,8 +12,8 @@ consoles. The project is currently at **M0: hardware proof**.
 
 The first target is intentionally small. It boots a native OpenOrbis
 application, initializes 1920x1080 video output, renders a controller-friendly
-placeholder shell, and writes diagnostic messages. Press **Options** to exit
-cleanly to the PS4 home screen. It does not log in, load
+placeholder shell, and writes diagnostic messages. Press **Options** to return
+to the PS4 home screen. It does not log in, load
 addons, or play media yet.
 
 | Milestone | Scope | Status |
