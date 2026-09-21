@@ -2,6 +2,8 @@
 #include <sstream>
 
 #include <orbis/libkernel.h>
+#include <orbis/Pad.h>
+#include <orbis/UserService.h>
 
 #include "graphics.h"
 #include "log.h"
@@ -18,8 +20,8 @@ constexpr int kWidth = 1920;
 constexpr int kHeight = 1080;
 constexpr int kPixelDepth = 4;
 constexpr int kFrameBuffers = 2;
-constexpr size_t kVideoMemory =
-    static_cast<size_t>(kWidth) * kHeight * kPixelDepth * kFrameBuffers;
+// Match the direct-memory pool used by OpenOrbis' working graphics sample.
+constexpr size_t kVideoMemory = 0xC000000;
 
 void drawHardwareProbe(Scene2D& scene) {
     const Color background = {18, 18, 24};
@@ -54,16 +56,35 @@ int main() {
     Scene2D scene(kWidth, kHeight, kPixelDepth);
     if (!scene.Init(kVideoMemory, kFrameBuffers)) {
         DEBUGLOG << "Video initialization failed";
-        for (;;) {
-            sceKernelUsleep(1000000);
-        }
+        sceKernelUsleep(3000000);
+        return 1;
     }
 
     DEBUGLOG << "Video initialized at 1920x1080; rendering hardware probe";
+
+    OrbisUserServiceInitializeParams userParams = {};
+    userParams.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
+    int userId = -1;
+    int pad = -1;
+
+    sceUserServiceInitialize(&userParams);
+    if (sceUserServiceGetInitialUser(&userId) == 0 && scePadInit() == 0) {
+        pad = scePadOpen(userId, 0, 0, nullptr);
+    }
+
     int frameId = 1;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
+        if (pad >= 0) {
+            OrbisPadData padData = {};
+            if (scePadReadState(pad, &padData) == 0 &&
+                (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
+                DEBUGLOG << "Options pressed; exiting cleanly";
+                return 0;
+            }
+        }
+
         drawHardwareProbe(scene);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
