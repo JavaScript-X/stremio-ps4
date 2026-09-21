@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.14
+VERSION    := 1.15
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -63,7 +63,7 @@ $(BUILDDIR)/main.o: src/main.cpp | $(BUILDDIR)
 $(BUILDDIR)/avplayer.o: src/avplayer.cpp src/avplayer.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
-$(BUILDDIR)/graphics.o: $(COMMONDIR)/graphics.cpp | $(BUILDDIR)
+$(BUILDDIR)/graphics.o: src/graphics.cpp src/graphics.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/$(TARGET).elf: $(OBJECTS)

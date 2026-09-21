@@ -17,11 +17,6 @@
 
 std::stringstream debugLogStream;
 
-// OpenOrbis' shared Scene2D helper declares this destructor but v0.5.4 does
-// not provide its definition. The application owns the scene for its entire
-// process lifetime, so the default implementation is sufficient here.
-Scene2D::~Scene2D() = default;
-
 extern "C" int sceSysUtilSendSystemNotificationWithText(
     int messageType,
     const char* message);
@@ -85,17 +80,7 @@ void drawDecodedPreview(
         scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
     }
 
-    const auto& pixels = player.preview();
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            const uint32_t pixel = pixels[static_cast<size_t>(y) * width + x];
-            const Color color = {
-                static_cast<uint8_t>((pixel >> 16) & 0xff),
-                static_cast<uint8_t>((pixel >> 8) & 0xff),
-                static_cast<uint8_t>(pixel & 0xff)};
-            scene.DrawPixel(startX + x, startY + y, color);
-        }
-    }
+    scene.BlitRgb(startX, startY, width, height, player.preview().data());
 }
 
 void notify(const char* message) {
@@ -161,7 +146,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.14",
+        "StremioPS4/1.15",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -207,7 +192,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.14: normal-motion playback timing");
+    notify("Stremio PS4 1.15: pitch-correct fast renderer");
 
     const int pad = initializeController();
     notify(pad >= 0

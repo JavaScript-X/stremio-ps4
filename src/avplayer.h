@@ -109,6 +109,9 @@ int32_t sceAvPlayerClose(SceAvPlayerHandle handle);
 bool sceAvPlayerGetVideoData(
     SceAvPlayerHandle handle,
     SceAvPlayerFrameInfo* frameInfo);
+bool sceAvPlayerGetVideoDataEx(
+    SceAvPlayerHandle handle,
+    SceAvPlayerFrameInfoEx* frameInfo);
 uint8_t sceAvPlayerIsActive(SceAvPlayerHandle handle);
 int32_t sceAvPlayerStreamCount(SceAvPlayerHandle handle);
 int32_t sceAvPlayerGetStreamInfo(

@@ -197,23 +197,26 @@ void AvPlayerProbe::update() {
         return;
     }
 
-    SceAvPlayerFrameInfo frame = {};
-    if (sceAvPlayerGetVideoData(handle_, &frame) && frame.pData) {
+    SceAvPlayerFrameInfoEx frame = {};
+    if (sceAvPlayerGetVideoDataEx(handle_, &frame) && frame.pData) {
         width_ = frame.details.video.width;
         height_ = frame.details.video.height;
+        const uint32_t pitch = frame.details.video.pitch > 0
+            ? frame.details.video.pitch
+            : width_;
         previewWidth_ = width_ / 2;
         previewHeight_ = height_ / 2;
         preview_.resize(static_cast<size_t>(previewWidth_) * previewHeight_);
         ++decodedFrames_;
 
-        const uint8_t* luma = frame.pData;
-        const uint8_t* chroma = luma + static_cast<size_t>(width_) * height_;
+        const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
+        const uint8_t* chroma = luma + static_cast<size_t>(pitch) * height_;
         for (uint32_t py = 0; py < previewHeight_; ++py) {
             const uint32_t y = py * 2;
             for (uint32_t px = 0; px < previewWidth_; ++px) {
                 const uint32_t x = px * 2;
-                const int yy = luma[static_cast<size_t>(y) * width_ + x] - 16;
-                const size_t uv = static_cast<size_t>(y / 2) * width_ + x;
+                const int yy = luma[static_cast<size_t>(y) * pitch + x] - 16;
+                const size_t uv = static_cast<size_t>(y / 2) * pitch + x;
                 const int u = chroma[uv] - 128;
                 const int v = chroma[uv + 1] - 128;
                 const int r = (298 * yy + 409 * v + 128) >> 8;

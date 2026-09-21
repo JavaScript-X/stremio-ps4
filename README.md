@@ -19,6 +19,9 @@ GPU-visible direct-memory arena, as required by the PS4 AVPlayer ABI.
 Playback waits for AVPlayer's ready event before starting and uses its
 non-blocking frame query so the controller and timeout remain responsive. The
 video stream is enumerated and explicitly enabled before playback starts.
+Extended frame metadata supplies the real NV12 pitch, and the renderer writes
+rows directly into the framebuffer rather than calling a pixel function for
+every output pixel.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:
