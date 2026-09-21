@@ -4,8 +4,16 @@
 #include <cstring>
 
 #include <orbis/Sysmodule.h>
+#include <orbis/libkernel.h>
 
 namespace {
+constexpr size_t kTexturePoolSize = 64 * 1024 * 1024;
+constexpr size_t kDirectMemoryAlignment = 0x200000;
+
+void* texturePool = nullptr;
+size_t texturePoolOffset = 0;
+off_t texturePoolDirectOffset = 0;
+
 void* allocateAligned(void*, uint32_t alignment, uint32_t size) {
     if (alignment < sizeof(void*)) {
         alignment = sizeof(void*);
@@ -14,6 +22,56 @@ void* allocateAligned(void*, uint32_t alignment, uint32_t size) {
         (static_cast<size_t>(size) + alignment - 1) & ~(alignment - 1);
     void* result = nullptr;
     return posix_memalign(&result, alignment, alignedSize) == 0 ? result : nullptr;
+}
+
+bool initializeTexturePool() {
+    if (texturePool) {
+        texturePoolOffset = 0;
+        return true;
+    }
+
+    if (sceKernelAllocateDirectMemory(
+            0,
+            sceKernelGetDirectMemorySize(),
+            kTexturePoolSize,
+            kDirectMemoryAlignment,
+            3,
+            &texturePoolDirectOffset) < 0) {
+        return false;
+    }
+
+    if (sceKernelMapDirectMemory(
+            &texturePool,
+            kTexturePoolSize,
+            0x33,
+            0,
+            texturePoolDirectOffset,
+            kDirectMemoryAlignment) < 0) {
+        sceKernelReleaseDirectMemory(texturePoolDirectOffset, kTexturePoolSize);
+        texturePool = nullptr;
+        return false;
+    }
+    texturePoolOffset = 0;
+    return true;
+}
+
+void* allocateTexture(void*, uint32_t alignment, uint32_t size) {
+    if (!texturePool || alignment == 0) {
+        return nullptr;
+    }
+    const size_t alignedOffset =
+        (texturePoolOffset + alignment - 1) & ~(static_cast<size_t>(alignment) - 1);
+    if (alignedOffset + size > kTexturePoolSize) {
+        return nullptr;
+    }
+    void* result = static_cast<uint8_t*>(texturePool) + alignedOffset;
+    texturePoolOffset = alignedOffset + size;
+    return result;
+}
+
+void releaseTexture(void*, void*) {
+    // The arena is reset only after AVPlayer has closed, so its worker threads
+    // can never observe recycled decoder buffers during shutdown.
 }
 
 void release(void*, void* pointer) {
@@ -32,9 +90,16 @@ bool AvPlayerProbe::start(const char* url) {
     width_ = 0;
     height_ = 0;
 
+    if (!initializeTexturePool()) {
+        errorStage_ = 1;
+        errorCode_ = -1;
+        state_ = State::Failed;
+        return false;
+    }
+
     errorCode_ = sceSysmoduleLoadModule(ORBIS_SYSMODULE_AV_PLAYER);
     if (errorCode_ < 0) {
-        errorStage_ = 1;
+        errorStage_ = 2;
         state_ = State::Failed;
         return false;
     }
@@ -42,8 +107,8 @@ bool AvPlayerProbe::start(const char* url) {
     SceAvPlayerInitData init = {};
     init.memoryReplacement.allocate = allocateAligned;
     init.memoryReplacement.deallocate = release;
-    init.memoryReplacement.allocateTexture = allocateAligned;
-    init.memoryReplacement.deallocateTexture = release;
+    init.memoryReplacement.allocateTexture = allocateTexture;
+    init.memoryReplacement.deallocateTexture = releaseTexture;
     init.basePriority = 160;
     init.numOutputVideoFrameBuffers = 4;
     init.autoStart = 1;
@@ -51,14 +116,14 @@ bool AvPlayerProbe::start(const char* url) {
 
     handle_ = sceAvPlayerInit(&init);
     if (!handle_) {
-        errorStage_ = 2;
+        errorStage_ = 3;
         state_ = State::Failed;
         return false;
     }
 
     errorCode_ = sceAvPlayerAddSource(handle_, url);
     if (errorCode_ < 0) {
-        errorStage_ = 3;
+        errorStage_ = 4;
         state_ = State::Failed;
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
@@ -79,7 +144,7 @@ void AvPlayerProbe::update() {
 
     state_ = State::Decoding;
     SceAvPlayerFrameInfoEx frame = {};
-    if (sceAvPlayerGetVideoDataEx(handle_, &frame) == 0 && frame.pData) {
+    if (sceAvPlayerGetVideoDataEx(handle_, &frame) && frame.pData) {
         width_ = frame.details.video.width;
         height_ = frame.details.video.height;
         state_ = State::Passed;

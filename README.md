@@ -14,7 +14,8 @@ The current hardware probe boots a native OpenOrbis application, initializes
 1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
 and can ask the PS4 AVPlayer to decode a frame from a packaged copy of Mozilla's
 CC0 H.264 test clip. Packaging the probe asset isolates hardware decoding from
-the separate remote-stream transport path.
+the separate remote-stream transport path. Decoder textures use a dedicated
+GPU-visible direct-memory arena, as required by the PS4 AVPlayer ABI.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:

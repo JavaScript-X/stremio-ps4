@@ -78,7 +78,7 @@ struct SceAvPlayerFrameInfoEx {
 SceAvPlayerHandle sceAvPlayerInit(SceAvPlayerInitData* data);
 int32_t sceAvPlayerAddSource(SceAvPlayerHandle handle, const char* filename);
 int32_t sceAvPlayerClose(SceAvPlayerHandle handle);
-int32_t sceAvPlayerGetVideoDataEx(
+bool sceAvPlayerGetVideoDataEx(
     SceAvPlayerHandle handle,
     SceAvPlayerFrameInfoEx* frameInfo);
 uint8_t sceAvPlayerIsActive(SceAvPlayerHandle handle);
