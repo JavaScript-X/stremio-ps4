@@ -39,6 +39,20 @@ binaries or Sony SDK files are committed to this repository.
 
 ## Build
 
+### Reproducible Docker build
+
+Docker Desktop is the recommended build path on Windows. The image downloads
+the official OpenOrbis v0.5.4 LLVM 18 archive and verifies its published
+SHA-256 before extracting it.
+
+```powershell
+./scripts/fetch-openorbis.ps1
+docker compose build builder
+docker compose run --rm builder
+```
+
+### Existing OpenOrbis installation
+
 ```sh
 export OO_PS4_TOOLCHAIN=/path/to/OpenOrbis-PS4-Toolchain
 make check
@@ -70,4 +84,3 @@ make RIGHT_SPRX=/path/to/right.sprx ICON0=/path/to/icon0.png
 Keep changes focused and never commit credentials, copyrighted media, official
 Sony SDK material, or generated PKGs. Test reports should include the firmware,
 payload/loader, visible result, and the final diagnostic lines.
-

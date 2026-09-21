@@ -1,0 +1,9 @@
+services:
+  builder:
+    build:
+      context: .
+    image: stremio-ps4-builder:openorbis-0.5.4
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+
