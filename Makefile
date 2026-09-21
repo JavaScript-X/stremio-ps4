@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.20
+VERSION    := 1.21
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -30,7 +30,8 @@ CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \
 LDFLAGS    := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x \
 	--eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
 
-OBJECTS    := $(BUILDDIR)/main.o $(BUILDDIR)/avplayer.o $(BUILDDIR)/graphics.o
+OBJECTS    := $(BUILDDIR)/main.o $(BUILDDIR)/avplayer.o \
+	$(BUILDDIR)/graphics.o $(BUILDDIR)/catalog.o
 PACKAGE    := $(DISTDIR)/$(CONTENT_ID).pkg
 
 .PHONY: all prepare package check clean
@@ -64,6 +65,9 @@ $(BUILDDIR)/avplayer.o: src/avplayer.cpp src/avplayer.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/graphics.o: src/graphics.cpp src/graphics.h | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(BUILDDIR)/catalog.o: src/catalog.cpp src/catalog.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/$(TARGET).elf: $(OBJECTS)

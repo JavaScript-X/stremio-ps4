@@ -1,7 +1,7 @@
 # Stremio PS4
 
 An experimental, community-built Stremio client for jailbroken PlayStation 4
-consoles. The project is currently at **M1: platform foundation**.
+consoles. The project is currently entering **M2: catalogs and metadata**.
 
 > [!IMPORTANT]
 > This is an unofficial project and is not affiliated with or endorsed by
@@ -28,14 +28,18 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-It does not log in, load addons, or present decoded audio yet.
+Version 1.21 adds the first Stremio addon-protocol catalog path: a bounded HTTPS
+download of Cinemeta's top-movies catalog and dependency-free parsing of four
+metadata previews. It does not log in, download posters, load user addons, or
+present decoded audio yet.
 
 M1 controller test controls:
 
 - **Left/Right** moves the highlighted poster card.
-- **Cross** activates the focused card and shows a notification.
-- **Triangle** runs a certificate-verified HTTPS connectivity probe against
-  `https://www.stremio.com/` and reports the status code.
+- **Triangle** downloads and parses the Cinemeta top-movies catalog. Success
+  reports the first real movie title and makes four metadata cards selectable.
+- **Cross** reports the title of the focused Cinemeta item after the catalog has
+  loaded.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
 - **Circle** cancels an active AVPlayer probe.
@@ -48,7 +52,7 @@ M1 controller test controls:
 | --- | --- | --- |
 | M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
 | M1 | Controller, HTTPS, and local H.264 decode proof | Validated on PS4 FW 13.02 |
-| M2 | Stremio login, catalogs, search and metadata | Planned |
+| M2 | Stremio login, catalogs, search and metadata | In progress |
 | M3 | Direct stream selection and playback | Planned |
 | M4 | Companion Stremio server integration | Planned |
 | M5 | Library, progress sync, subtitles and settings | Planned |

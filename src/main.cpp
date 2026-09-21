@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include <orbis/libkernel.h>
 #include <orbis/Http.h>
@@ -14,6 +16,7 @@
 #include "graphics.h"
 #include "log.h"
 #include "avplayer.h"
+#include "catalog.h"
 
 std::stringstream debugLogStream;
 
@@ -31,6 +34,9 @@ constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
 constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
+constexpr const char* kCatalogUrl =
+    "https://cinemeta-catalogs.strem.io/top/catalog/movie/top.json";
+constexpr size_t kMaximumCatalogBytes = 512 * 1024;
 
 int networkPoolId = 0;
 int sslContextId = 0;
@@ -189,12 +195,72 @@ int probeStremioHttps() {
     sceHttpDeleteTemplate(templateId);
     return statusCode;
 }
+
+int fetchCatalog(std::vector<CatalogItem>& items) {
+    if (!initializeHttp()) return -1;
+    int templateId = sceHttpCreateTemplate(
+        httpContextId, "StremioPS4/1.21", ORBIS_HTTP_VERSION_1_1, 1);
+    if (templateId < 0) return -2;
+    sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
+
+    int connectionId =
+        sceHttpCreateConnectionWithURL(templateId, kCatalogUrl, false);
+    if (connectionId < 0) {
+        sceHttpDeleteTemplate(templateId);
+        return -3;
+    }
+    int requestId = sceHttpCreateRequestWithURL(
+        connectionId, ORBIS_METHOD_GET, kCatalogUrl, 0);
+    if (requestId < 0) {
+        sceHttpDeleteConnection(connectionId);
+        sceHttpDeleteTemplate(templateId);
+        return -4;
+    }
+
+    int result = -5;
+    if (sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
+        int status = 0;
+        if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
+            std::string body;
+            body.reserve(64 * 1024);
+            char chunk[8192];
+            result = -6;
+            for (;;) {
+                const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
+                if (bytes < 0) {
+                    result = -7;
+                    break;
+                }
+                if (bytes == 0) {
+                    result = parseCatalogItems(body, items, 4)
+                        ? static_cast<int>(items.size()) : -8;
+                    break;
+                }
+                if (body.size() + static_cast<size_t>(bytes) >
+                    kMaximumCatalogBytes) {
+                    result = -9;
+                    break;
+                }
+                body.append(chunk, static_cast<size_t>(bytes));
+            }
+        } else if (status > 0) {
+            result = -status;
+        }
+    }
+
+    sceHttpDeleteRequest(requestId);
+    sceHttpDeleteConnection(connectionId);
+    sceHttpDeleteTemplate(templateId);
+    return result;
+}
 }  // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.20: PS-button Home navigation");
+    notify("Stremio PS4 1.21: Cinemeta catalog test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -230,6 +296,7 @@ int main() {
     std::vector<uint32_t> previewPixels;
     uint32_t previewWidth = 0;
     uint32_t previewHeight = 0;
+    std::vector<CatalogItem> catalogItems;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -262,24 +329,33 @@ int main() {
                 ? "Stremio PS4: playback paused"
                 : "Stremio PS4: playback resumed");
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
-            notify("Stremio PS4: focused card activated");
+            if (focusedCard < static_cast<int>(catalogItems.size())) {
+                char selected[192];
+                snprintf(selected, sizeof(selected),
+                    "Stremio PS4: selected %s",
+                    catalogItems[focusedCard].name.c_str());
+                notify(selected);
+            } else {
+                notify("Stremio PS4: load Cinemeta first with Triangle");
+            }
         }
         if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
-            notify("Stremio PS4: running HTTPS probe...");
-            const int statusCode = probeStremioHttps();
-            char result[96];
-            if (statusCode >= 100) {
+            notify("Stremio PS4: loading Cinemeta top movies...");
+            const int catalogResult = fetchCatalog(catalogItems);
+            char result[192];
+            if (catalogResult > 0) {
                 snprintf(
                     result,
                     sizeof(result),
-                    "Stremio PS4: HTTPS status %d",
-                    statusCode);
+                    "Stremio PS4: loaded %d cards; first is %s",
+                    catalogResult,
+                    catalogItems[0].name.c_str());
             } else {
                 snprintf(
                     result,
                     sizeof(result),
-                    "Stremio PS4: HTTPS probe failed at stage %d",
-                    -statusCode);
+                    "Stremio PS4: catalog failed at stage %d",
+                    -catalogResult);
             }
             notify(result);
         }
