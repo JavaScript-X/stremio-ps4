@@ -17,7 +17,8 @@ CC0 H.264 test clip. Packaging the probe asset isolates hardware decoding from
 the separate remote-stream transport path. Decoder textures use a dedicated
 GPU-visible direct-memory arena, as required by the PS4 AVPlayer ABI.
 Playback waits for AVPlayer's ready event before starting and uses its
-non-blocking frame query so the controller and timeout remain responsive.
+non-blocking frame query so the controller and timeout remain responsive. The
+video stream is enumerated and explicitly enabled before playback starts.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:

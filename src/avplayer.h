@@ -94,6 +94,14 @@ struct SceAvPlayerFrameInfo {
     SceAvPlayerStreamDetails details;
 };
 
+struct SceAvPlayerStreamInfo {
+    uint32_t type;
+    uint8_t reserved[4];
+    SceAvPlayerStreamDetails details;
+    uint64_t duration;
+    uint64_t startTime;
+};
+
 SceAvPlayerHandle sceAvPlayerInit(SceAvPlayerInitData* data);
 int32_t sceAvPlayerAddSource(SceAvPlayerHandle handle, const char* filename);
 int32_t sceAvPlayerClose(SceAvPlayerHandle handle);
@@ -101,6 +109,12 @@ bool sceAvPlayerGetVideoData(
     SceAvPlayerHandle handle,
     SceAvPlayerFrameInfo* frameInfo);
 uint8_t sceAvPlayerIsActive(SceAvPlayerHandle handle);
+int32_t sceAvPlayerStreamCount(SceAvPlayerHandle handle);
+int32_t sceAvPlayerGetStreamInfo(
+    SceAvPlayerHandle handle,
+    uint32_t streamId,
+    SceAvPlayerStreamInfo* info);
+int32_t sceAvPlayerEnableStream(SceAvPlayerHandle handle, uint32_t streamId);
 int32_t sceAvPlayerStart(SceAvPlayerHandle handle);
 int32_t sceAvPlayerStop(SceAvPlayerHandle handle);
 

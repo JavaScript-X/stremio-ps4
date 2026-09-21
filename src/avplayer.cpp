@@ -147,13 +147,34 @@ void AvPlayerProbe::update() {
         return;
     }
     constexpr int32_t kReadyEvent = 0x02;
+    constexpr uint32_t kVideoStream = 0;
     if (!started_) {
         if (latestPlayerEvent != kReadyEvent) {
             return;
         }
+
+        bool videoEnabled = false;
+        const int32_t streamCount = sceAvPlayerStreamCount(handle_);
+        for (int32_t index = 0; index < streamCount; ++index) {
+            SceAvPlayerStreamInfo info = {};
+            if (sceAvPlayerGetStreamInfo(handle_, index, &info) >= 0 &&
+                info.type == kVideoStream &&
+                sceAvPlayerEnableStream(handle_, index) >= 0) {
+                width_ = info.details.video.width;
+                height_ = info.details.video.height;
+                videoEnabled = true;
+            }
+        }
+        if (!videoEnabled) {
+            errorStage_ = 5;
+            errorCode_ = streamCount;
+            state_ = State::Failed;
+            return;
+        }
+
         errorCode_ = sceAvPlayerStart(handle_);
         if (errorCode_ < 0) {
-            errorStage_ = 5;
+            errorStage_ = 6;
             state_ = State::Failed;
             return;
         }

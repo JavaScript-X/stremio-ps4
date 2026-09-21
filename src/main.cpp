@@ -133,7 +133,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.09",
+        "StremioPS4/1.10",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -179,7 +179,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.09: event-driven AVPlayer test");
+    notify("Stremio PS4 1.10: enabled-stream AVPlayer test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -285,6 +285,14 @@ int main() {
                 snprintf(result, sizeof(result),
                     "Stremio PS4: decoded frame %ux%u",
                     avPlayer.width(), avPlayer.height());
+                notify(result);
+                avPlayer.stop();
+            } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
+                char result[128];
+                snprintf(result, sizeof(result),
+                    "Stremio PS4: AVPlayer stage %d, code 0x%08x",
+                    avPlayer.errorStage(),
+                    static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
                 avPlayer.stop();
             }
