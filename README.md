@@ -16,6 +16,13 @@ placeholder shell, and writes diagnostic messages. Press **Options** to return
 to the PS4 home screen. It does not log in, load
 addons, or play media yet.
 
+M1 controller test controls:
+
+- **Left/Right** moves the highlighted poster card.
+- **Cross** activates the focused card and shows a notification.
+- **Triangle** shows the next diagnostic action.
+- **Options** returns to the PS4 home screen.
+
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M0 | PKG, video output, diagnostics | In progress |
