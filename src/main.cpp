@@ -13,6 +13,7 @@
 
 #include "graphics.h"
 #include "log.h"
+#include "avplayer.h"
 
 std::stringstream debugLogStream;
 
@@ -34,6 +35,9 @@ constexpr int kFrameBuffers = 2;
 constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
+constexpr const char* kLegalVideoUrl =
+    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/"
+    "ForBiggerBlazes.mp4";
 
 int networkPoolId = 0;
 int sslContextId = 0;
@@ -131,7 +135,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.04",
+        "StremioPS4/1.05",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -177,7 +181,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.04: controller + HTTPS test");
+    notify("Stremio PS4 1.05: AVPlayer frame test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -203,6 +207,9 @@ int main() {
     int frameId = 1;
     int focusedCard = 0;
     uint32_t previousButtons = 0;
+    AvPlayerProbe avPlayer;
+    AvPlayerProbe::State previousPlayerState = AvPlayerProbe::State::Idle;
+    int avPlayerProbeFrames = 0;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -243,6 +250,46 @@ int main() {
                     -statusCode);
             }
             notify(result);
+        }
+        if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
+            notify("Stremio PS4: opening legal H.264 test video...");
+            avPlayerProbeFrames = 0;
+            if (!avPlayer.start(kLegalVideoUrl)) {
+                char result[96];
+                snprintf(result, sizeof(result),
+                    "Stremio PS4: AVPlayer failed at stage %d",
+                    avPlayer.errorStage());
+                notify(result);
+            }
+        }
+        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+            avPlayer.state() != AvPlayerProbe::State::Idle) {
+            avPlayer.stop();
+            avPlayerProbeFrames = 0;
+            notify("Stremio PS4: AVPlayer probe cancelled");
+        }
+
+        avPlayer.update();
+        if (avPlayer.state() == AvPlayerProbe::State::Opening ||
+            avPlayer.state() == AvPlayerProbe::State::Decoding) {
+            ++avPlayerProbeFrames;
+            if (avPlayerProbeFrames > 1200) {
+                avPlayer.stop();
+                notify("Stremio PS4: AVPlayer timed out before first frame");
+            }
+        }
+        if (avPlayer.state() != previousPlayerState) {
+            if (avPlayer.state() == AvPlayerProbe::State::Decoding) {
+                notify("Stremio PS4: AVPlayer active; waiting for frame");
+            } else if (avPlayer.state() == AvPlayerProbe::State::Passed) {
+                char result[96];
+                snprintf(result, sizeof(result),
+                    "Stremio PS4: decoded frame %ux%u",
+                    avPlayer.width(), avPlayer.height());
+                notify(result);
+                avPlayer.stop();
+            }
+            previousPlayerState = avPlayer.state();
         }
 
         drawHardwareProbe(scene, focusedCard);

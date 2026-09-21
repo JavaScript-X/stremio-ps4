@@ -1,7 +1,7 @@
 # Stremio PS4
 
 An experimental, community-built Stremio client for jailbroken PlayStation 4
-consoles. The project is currently at **M0: hardware proof**.
+consoles. The project is currently at **M1: platform foundation**.
 
 > [!IMPORTANT]
 > This is an unofficial project and is not affiliated with or endorsed by
@@ -10,11 +10,10 @@ consoles. The project is currently at **M0: hardware proof**.
 
 ## Current status
 
-The first target is intentionally small. It boots a native OpenOrbis
-application, initializes 1920x1080 video output, renders a controller-friendly
-placeholder shell, and writes diagnostic messages. Press **Options** to return
-to the PS4 home screen. It does not log in, load
-addons, or play media yet.
+The current hardware probe boots a native OpenOrbis application, initializes
+1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
+and can ask the PS4 AVPlayer to decode a frame from a legal H.264 test clip.
+It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:
 
@@ -22,12 +21,15 @@ M1 controller test controls:
 - **Cross** activates the focused card and shows a notification.
 - **Triangle** runs a certificate-verified HTTPS connectivity probe against
   `https://www.stremio.com/` and reports the status code.
+- **Square** runs the AVPlayer hardware-decoder probe. Success reports the
+  dimensions of the first decoded frame.
+- **Circle** cancels an active AVPlayer probe.
 - **Options** returns to the PS4 home screen.
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
-| M0 | PKG, video output, diagnostics | In progress |
-| M1 | Controller input and HTTP/HLS playback proof | Planned |
+| M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
+| M1 | Controller input and HTTP/HLS playback proof | In progress |
 | M2 | Stremio login, catalogs, search and metadata | Planned |
 | M3 | Direct stream selection and playback | Planned |
 | M4 | Companion Stremio server integration | Planned |
