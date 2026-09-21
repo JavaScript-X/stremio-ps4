@@ -26,8 +26,8 @@ Frame retrieval and NV12 conversion run on a worker thread so a blocking
 decoder call cannot reduce the 60 FPS controller and presentation loop.
 Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
-Home navigation is never invoked in the decoder shutdown frame: Options first
-returns to the idle shell, and a second press performs the Home transition.
+Programmatic Home navigation is disabled because it is unstable on the tested
+firmware. The native PS button performs Home/background navigation safely.
 It does not log in, load addons, or present decoded audio yet.
 
 M1 controller test controls:
@@ -41,9 +41,8 @@ M1 controller test controls:
 - **Circle** cancels an active AVPlayer probe.
 - After a successful decode, the video plays continuously as a centered
   preview. **Cross** pauses/resumes and **Circle** stops and returns to the shell.
-- During playback, **Options** stops video and returns to the app shell. Press
-  **Options** again from the idle shell to go Home. The PS button remains the
-  console-native way to background or close the application directly.
+- During playback, **Options** stops video and returns to the app shell. From
+  the shell it displays a reminder to use the native **PS button** to go Home.
 
 | Milestone | Scope | Status |
 | --- | --- | --- |

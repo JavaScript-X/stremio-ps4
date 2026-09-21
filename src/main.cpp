@@ -148,7 +148,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.19",
+        "StremioPS4/1.20",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -194,7 +194,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.19: safe playback exit controls");
+    notify("Stremio PS4 1.20: PS-button Home navigation");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -207,8 +207,8 @@ int main() {
         notify("Stremio PS4: VIDEO INITIALIZATION FAILED");
         for (;;) {
             if ((readButtons(pad) & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-                sceSystemServiceNavigateToGoHome();
-                return 0;
+                notify("Stremio PS4: use the PS button to go Home");
+                sceKernelUsleep(500000);
             }
             sceKernelUsleep(16000);
         }
@@ -245,9 +245,8 @@ int main() {
                 previewVisible = false;
                 notify("Stremio PS4: playback stopped; Options again exits");
             } else {
-                DEBUGLOG << "Options pressed from shell; navigating Home";
-                sceSystemServiceNavigateToGoHome();
-                return 0;
+                DEBUGLOG << "Options pressed from shell; Home API disabled";
+                notify("Stremio PS4: use the PS button to go Home");
             }
         }
 
