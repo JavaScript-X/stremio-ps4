@@ -10,8 +10,8 @@
 ## M1 — platform foundation
 
 - [x] User service and DualShock 4 initialization
-- Focus navigation and safe-area layout
-- Network initialization and HTTPS request probe
+- [x] Focus navigation and safe-area layout
+- [x] Network initialization and certificate-verified HTTPS request probe
 - Persistent, non-secret settings
 - Legal MP4 and HLS playback test assets
 

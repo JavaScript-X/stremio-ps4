@@ -11,6 +11,17 @@ Validated package version: `1.02`
 
 Validated source commit: `a2654f8`
 
+## M1 follow-up validation
+
+Package version `1.04` was validated on the same firmware 13.02/HEN console:
+
+- Left/Right moved focus across all four cards.
+- Cross activated the focused card and displayed confirmation.
+- Triangle completed a certificate-verified request to `www.stremio.com` with
+  HTTP status 200.
+- Options returned to the PS4 home screen.
+- No crashes were observed.
+
 ## Goal
 
 Prove that the package launches, allocates two 1080p framebuffers, and presents
