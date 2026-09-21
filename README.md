@@ -26,6 +26,8 @@ Frame retrieval and NV12 conversion run on a worker thread so a blocking
 decoder call cannot reduce the 60 FPS controller and presentation loop.
 Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
+Home navigation is deferred until two clean post-playback frame flips have
+completed, avoiding a VideoOut transition in the decoder shutdown frame.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:
