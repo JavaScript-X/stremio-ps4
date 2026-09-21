@@ -90,8 +90,13 @@ uint8_t clampColor(int value) {
 }
 }  // namespace
 
+AvPlayerProbe::AvPlayerProbe() {
+    pthread_mutex_init(&previewMutex_, nullptr);
+}
+
 AvPlayerProbe::~AvPlayerProbe() {
     stop();
+    pthread_mutex_destroy(&previewMutex_);
 }
 
 bool AvPlayerProbe::start(const char* url) {
@@ -104,6 +109,7 @@ bool AvPlayerProbe::start(const char* url) {
     previewWidth_ = 0;
     previewHeight_ = 0;
     decodedFrames_ = 0;
+    stopDecoderThread_ = false;
     started_ = false;
     paused_ = false;
     latestPlayerEvent = 0;
@@ -154,7 +160,7 @@ bool AvPlayerProbe::start(const char* url) {
 }
 
 void AvPlayerProbe::update() {
-    if (!handle_ || state_ == State::Failed || paused_) {
+    if (!handle_ || state_ == State::Failed) {
         return;
     }
     constexpr int32_t kReadyEvent = 0x02;
@@ -193,27 +199,50 @@ void AvPlayerProbe::update() {
         state_ = State::Decoding;
     }
 
-    if (!sceAvPlayerIsActive(handle_)) {
-        return;
+    if (!decoderThreadRunning_) {
+        decoderThreadRunning_ = pthread_create(
+            &decoderThread_, nullptr, decoderThreadEntry, this) == 0;
+        if (!decoderThreadRunning_) {
+            errorStage_ = 7;
+            errorCode_ = -1;
+            state_ = State::Failed;
+        }
     }
 
-    SceAvPlayerFrameInfoEx frame = {};
-    if (sceAvPlayerGetVideoDataEx(handle_, &frame) && frame.pData) {
-        width_ = frame.details.video.width;
-        height_ = frame.details.video.height;
+    if (decodedFrames() > 0) state_ = State::Passed;
+}
+
+void* AvPlayerProbe::decoderThreadEntry(void* argument) {
+    static_cast<AvPlayerProbe*>(argument)->decoderLoop();
+    return nullptr;
+}
+
+void AvPlayerProbe::decoderLoop() {
+    while (!stopDecoderThread_) {
+        if (paused_ || !sceAvPlayerIsActive(handle_)) {
+            sceKernelUsleep(1000);
+            continue;
+        }
+
+        SceAvPlayerFrameInfoEx frame = {};
+        if (!sceAvPlayerGetVideoDataEx(handle_, &frame) || !frame.pData) {
+            sceKernelUsleep(1000);
+            continue;
+        }
+        const uint32_t frameWidth = frame.details.video.width;
+        const uint32_t frameHeight = frame.details.video.height;
         const uint32_t pitch = frame.details.video.pitch > 0
             ? frame.details.video.pitch
-            : width_;
-        previewWidth_ = width_ / 2;
-        previewHeight_ = height_ / 2;
-        preview_.resize(static_cast<size_t>(previewWidth_) * previewHeight_);
-        ++decodedFrames_;
+            : frameWidth;
+        const uint32_t outputWidth = frameWidth / 2;
+        const uint32_t outputHeight = frameHeight / 2;
+        std::vector<uint32_t> converted(static_cast<size_t>(outputWidth) * outputHeight);
 
         const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
-        const uint8_t* chroma = luma + static_cast<size_t>(pitch) * height_;
-        for (uint32_t py = 0; py < previewHeight_; ++py) {
+        const uint8_t* chroma = luma + static_cast<size_t>(pitch) * frameHeight;
+        for (uint32_t py = 0; py < outputHeight; ++py) {
             const uint32_t y = py * 2;
-            for (uint32_t px = 0; px < previewWidth_; ++px) {
+            for (uint32_t px = 0; px < outputWidth; ++px) {
                 const uint32_t x = px * 2;
                 const int yy = luma[static_cast<size_t>(y) * pitch + x] - 16;
                 const size_t uv = static_cast<size_t>(y / 2) * pitch + x;
@@ -222,19 +251,31 @@ void AvPlayerProbe::update() {
                 const int r = (298 * yy + 409 * v + 128) >> 8;
                 const int g = (298 * yy - 100 * u - 208 * v + 128) >> 8;
                 const int b = (298 * yy + 516 * u + 128) >> 8;
-                preview_[static_cast<size_t>(py) * previewWidth_ + px] =
+                converted[static_cast<size_t>(py) * outputWidth + px] =
                     (static_cast<uint32_t>(clampColor(r)) << 16) |
                     (static_cast<uint32_t>(clampColor(g)) << 8) |
                     clampColor(b);
             }
         }
-        state_ = State::Passed;
+        pthread_mutex_lock(&previewMutex_);
+        width_ = frameWidth;
+        height_ = frameHeight;
+        previewWidth_ = outputWidth;
+        previewHeight_ = outputHeight;
+        preview_.swap(converted);
+        ++decodedFrames_;
+        pthread_mutex_unlock(&previewMutex_);
     }
 }
 
 void AvPlayerProbe::stop() {
     if (handle_) {
+        stopDecoderThread_ = true;
         sceAvPlayerStop(handle_);
+        if (decoderThreadRunning_) {
+            pthread_join(decoderThread_, nullptr);
+            decoderThreadRunning_ = false;
+        }
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
     }
@@ -258,4 +299,35 @@ void AvPlayerProbe::togglePause() {
 
 uint64_t AvPlayerProbe::currentTime() const {
     return handle_ ? sceAvPlayerCurrentTime(handle_) : 0;
+}
+
+uint32_t AvPlayerProbe::width() const {
+    pthread_mutex_lock(&previewMutex_);
+    const uint32_t result = width_;
+    pthread_mutex_unlock(&previewMutex_);
+    return result;
+}
+
+uint32_t AvPlayerProbe::height() const {
+    pthread_mutex_lock(&previewMutex_);
+    const uint32_t result = height_;
+    pthread_mutex_unlock(&previewMutex_);
+    return result;
+}
+
+uint64_t AvPlayerProbe::decodedFrames() const {
+    pthread_mutex_lock(&previewMutex_);
+    const uint64_t result = decodedFrames_;
+    pthread_mutex_unlock(&previewMutex_);
+    return result;
+}
+
+bool AvPlayerProbe::copyPreview(
+    std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height) const {
+    pthread_mutex_lock(&previewMutex_);
+    pixels = preview_;
+    width = previewWidth_;
+    height = previewHeight_;
+    pthread_mutex_unlock(&previewMutex_);
+    return !pixels.empty();
 }

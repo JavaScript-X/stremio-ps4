@@ -22,6 +22,8 @@ video stream is enumerated and explicitly enabled before playback starts.
 Extended frame metadata supplies the real NV12 pitch, and the renderer writes
 rows directly into the framebuffer rather than calling a pixel function for
 every output pixel.
+Frame retrieval and NV12 conversion run on a worker thread so a blocking
+decoder call cannot reduce the 60 FPS controller and presentation loop.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:

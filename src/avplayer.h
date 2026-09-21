@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <pthread.h>
 
 // OpenOrbis v0.5.4 exposes the AVPlayer symbols, but its public header omits
 // their ABI. These declarations cover only the subset used by our diagnostic.
@@ -131,6 +132,7 @@ class AvPlayerProbe {
 public:
     enum class State { Idle, Opening, Decoding, Passed, Failed };
 
+    AvPlayerProbe();
     ~AvPlayerProbe();
     bool start(const char* url);
     void update();
@@ -140,16 +142,16 @@ public:
     State state() const { return state_; }
     int errorStage() const { return errorStage_; }
     int32_t errorCode() const { return errorCode_; }
-    uint32_t width() const { return width_; }
-    uint32_t height() const { return height_; }
-    const std::vector<uint32_t>& preview() const { return preview_; }
-    uint32_t previewWidth() const { return previewWidth_; }
-    uint32_t previewHeight() const { return previewHeight_; }
+    uint32_t width() const;
+    uint32_t height() const;
+    bool copyPreview(std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height) const;
     bool paused() const { return paused_; }
-    uint64_t decodedFrames() const { return decodedFrames_; }
+    uint64_t decodedFrames() const;
     uint64_t currentTime() const;
 
 private:
+    static void* decoderThreadEntry(void* argument);
+    void decoderLoop();
     SceAvPlayerHandle handle_ = nullptr;
     State state_ = State::Idle;
     int errorStage_ = 0;
@@ -162,4 +164,8 @@ private:
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;
     uint64_t decodedFrames_ = 0;
+    pthread_t decoderThread_ = {};
+    mutable pthread_mutex_t previewMutex_ = {};
+    volatile bool decoderThreadRunning_ = false;
+    volatile bool stopDecoderThread_ = false;
 };

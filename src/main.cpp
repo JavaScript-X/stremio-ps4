@@ -67,12 +67,14 @@ void drawHardwareProbe(Scene2D& scene, int focusedCard) {
 
 void drawDecodedPreview(
     Scene2D& scene,
-    const AvPlayerProbe& player,
+    const std::vector<uint32_t>& pixels,
+    uint32_t previewWidth,
+    uint32_t previewHeight,
     bool paintBackground) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
-    const int width = static_cast<int>(player.previewWidth());
-    const int height = static_cast<int>(player.previewHeight());
+    const int width = static_cast<int>(previewWidth);
+    const int height = static_cast<int>(previewHeight);
     const int startX = (kWidth - width) / 2;
     const int startY = (kHeight - height) / 2;
     if (paintBackground) {
@@ -80,7 +82,7 @@ void drawDecodedPreview(
         scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
     }
 
-    scene.BlitRgb(startX, startY, width, height, player.preview().data());
+    scene.BlitRgb(startX, startY, width, height, pixels.data());
 }
 
 void notify(const char* message) {
@@ -146,7 +148,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.15",
+        "StremioPS4/1.16",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -192,7 +194,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.15: pitch-correct fast renderer");
+    notify("Stremio PS4 1.16: threaded video decode");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -225,6 +227,9 @@ int main() {
     int previewBackgroundFrames = 0;
     uint64_t playbackWallStart = 0;
     bool playbackTimingReported = false;
+    std::vector<uint32_t> previewPixels;
+    uint32_t previewWidth = 0;
+    uint32_t previewHeight = 0;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -334,7 +339,10 @@ int main() {
         }
 
         if (previewVisible) {
-            drawDecodedPreview(scene, avPlayer, previewBackgroundFrames > 0);
+            avPlayer.copyPreview(previewPixels, previewWidth, previewHeight);
+            drawDecodedPreview(
+                scene, previewPixels, previewWidth, previewHeight,
+                previewBackgroundFrames > 0);
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }
