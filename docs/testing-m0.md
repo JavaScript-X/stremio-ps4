@@ -66,3 +66,9 @@ reported output was `decoded frame 960x540` and appeared almost immediately.
 This validates package file access, MP4 demuxing, H.264 hardware decoding,
 GPU-visible decoder allocation, and decoded-frame retrieval. Displaying those
 NV12 frames and consuming decoded audio remain separate follow-up work.
+
+Package version `1.11` additionally displayed a centered 480x270 flower image
+converted from the decoded NV12 frame. Circle returned to the shell and Options
+returned Home. Resuming that backgrounded instance exposed stale VideoOut state,
+so version `1.12` changes Options to stop playback and exit cleanly after the
+Home navigation request.

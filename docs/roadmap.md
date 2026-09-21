@@ -14,7 +14,7 @@
 - [x] Network initialization and certificate-verified HTTPS request probe
 - Persistent, non-secret settings
 - [x] Packaged CC0 MP4 H.264 hardware-decoder frame probe
-- [ ] Decoded NV12-to-RGB preview (implemented; console validation pending)
+- [x] Decoded NV12-to-RGB preview
 - Legal HLS playback test asset
 
 ## M2 — Stremio browsing

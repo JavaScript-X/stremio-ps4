@@ -157,7 +157,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.11",
+        "StremioPS4/1.12",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -203,7 +203,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.11: decoded-frame preview");
+    notify("Stremio PS4 1.12: safe-exit frame preview");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -217,7 +217,7 @@ int main() {
         for (;;) {
             if ((readButtons(pad) & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
                 sceSystemServiceNavigateToGoHome();
-                sceKernelUsleep(1000000);
+                return 0;
             }
             sceKernelUsleep(16000);
         }
@@ -242,9 +242,10 @@ int main() {
         previousButtons = buttons;
 
         if ((pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-            DEBUGLOG << "Options pressed; navigating home";
+            DEBUGLOG << "Options pressed; navigating home and exiting";
+            avPlayer.stop();
             sceSystemServiceNavigateToGoHome();
-            sceKernelUsleep(1000000);
+            return 0;
         }
 
         if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
