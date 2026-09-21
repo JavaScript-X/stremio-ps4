@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.06
+VERSION    := 1.07
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -13,6 +13,7 @@ RIGHT_SPRX ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/about/right.sprx
 ICON0      ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/icon0.png
 LIBC_PRX   ?= $(TOOLCHAIN)/samples/graphics/sce_module/libc.prx
 FIOS2_PRX  ?= $(TOOLCHAIN)/samples/graphics/sce_module/libSceFios2.prx
+TEST_VIDEO := assets/flower.mp4
 
 CC         := clang-18
 CXX        := clang++-18
@@ -51,6 +52,7 @@ check:
 	@test -f "$(ICON0)" || (echo "icon0.png not found; set ICON0"; exit 1)
 	@test -f "$(LIBC_PRX)" || (echo "libc.prx not found; set LIBC_PRX"; exit 1)
 	@test -f "$(FIOS2_PRX)" || (echo "libSceFios2.prx not found; set FIOS2_PRX"; exit 1)
+	@test -f "$(TEST_VIDEO)" || (echo "CC0 test video not found: $(TEST_VIDEO)"; exit 1)
 
 $(BUILDDIR) $(DISTDIR) $(BUILDDIR)/sce_sys/about $(BUILDDIR)/sce_module:
 	mkdir -p $@
@@ -83,6 +85,10 @@ $(BUILDDIR)/sce_module/libc.prx: $(LIBC_PRX) | $(BUILDDIR)/sce_module
 $(BUILDDIR)/sce_module/libSceFios2.prx: $(FIOS2_PRX) | $(BUILDDIR)/sce_module
 	cp $< $@
 
+$(BUILDDIR)/assets/flower.mp4: $(TEST_VIDEO)
+	mkdir -p $(BUILDDIR)/assets
+	cp $< $@
+
 $(BUILDDIR)/sce_sys/param.sfo: Makefile | $(BUILDDIR)/sce_sys/about
 	$(TOOLS)/PkgTool.Core sfo_new $@
 	$(TOOLS)/PkgTool.Core sfo_setentry $@ APP_TYPE --type Integer --maxsize 4 --value 1
@@ -98,10 +104,11 @@ $(BUILDDIR)/sce_sys/param.sfo: Makefile | $(BUILDDIR)/sce_sys/about
 
 $(BUILDDIR)/pkg.gp4: $(BUILDDIR)/eboot.bin $(BUILDDIR)/sce_sys/about/right.sprx \
 	$(BUILDDIR)/sce_sys/icon0.png $(BUILDDIR)/sce_sys/param.sfo \
-	$(BUILDDIR)/sce_module/libc.prx $(BUILDDIR)/sce_module/libSceFios2.prx
+	$(BUILDDIR)/sce_module/libc.prx $(BUILDDIR)/sce_module/libSceFios2.prx \
+	$(BUILDDIR)/assets/flower.mp4
 	cd $(BUILDDIR) && $(TOOLS)/create-gp4 -out pkg.gp4 \
 		--content-id=$(CONTENT_ID) \
-		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx"
+		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx assets/flower.mp4"
 
 $(PACKAGE): $(BUILDDIR)/pkg.gp4 | $(DISTDIR)
 	$(TOOLS)/PkgTool.Core pkg_build $< $(DISTDIR)

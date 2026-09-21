@@ -12,7 +12,9 @@ consoles. The project is currently at **M1: platform foundation**.
 
 The current hardware probe boots a native OpenOrbis application, initializes
 1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
-and can ask the PS4 AVPlayer to decode a frame from Mozilla's CC0 H.264 test clip.
+and can ask the PS4 AVPlayer to decode a frame from a packaged copy of Mozilla's
+CC0 H.264 test clip. Packaging the probe asset isolates hardware decoding from
+the separate remote-stream transport path.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:
@@ -86,6 +88,9 @@ The package step needs the standard OpenOrbis runtime files at:
 $OO_PS4_TOOLCHAIN/samples/_common/sce_sys/about/right.sprx
 $OO_PS4_TOOLCHAIN/samples/_common/sce_sys/icon0.png
 ```
+
+The small `assets/flower.mp4` decoder probe is Mozilla's CC0 interactive-example
+video. It is included only as a deterministic hardware test asset.
 
 Some OpenOrbis releases arrange these assets differently. If `make check`
 reports a missing path, set `RIGHT_SPRX` or `ICON0` explicitly:
