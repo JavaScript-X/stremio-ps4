@@ -1,0 +1,16 @@
+# OpenOrbis build outputs
+build/
+dist/
+eboot.bin
+pkg.gp4
+*.pkg
+*.elf
+*.oelf
+*.o
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
