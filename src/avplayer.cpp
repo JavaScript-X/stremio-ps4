@@ -271,11 +271,11 @@ void AvPlayerProbe::decoderLoop() {
 void AvPlayerProbe::stop() {
     if (handle_) {
         stopDecoderThread_ = true;
-        sceAvPlayerStop(handle_);
         if (decoderThreadRunning_) {
             pthread_join(decoderThread_, nullptr);
             decoderThreadRunning_ = false;
         }
+        sceAvPlayerStop(handle_);
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
     }

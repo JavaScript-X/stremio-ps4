@@ -148,7 +148,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.16",
+        "StremioPS4/1.17",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -194,7 +194,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.16: threaded video decode");
+    notify("Stremio PS4 1.17: safe threaded shutdown");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -346,13 +346,17 @@ int main() {
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }
-            if (!playbackTimingReported && avPlayer.decodedFrames() >= 120) {
+            if (!playbackTimingReported && avPlayer.decodedFrames() >= 48) {
                 const uint64_t wallMs =
                     (sceKernelGetProcessTime() - playbackWallStart) / 1000;
+                const uint64_t fpsTimesTen = wallMs > 0
+                    ? avPlayer.decodedFrames() * 10000 / wallMs
+                    : 0;
                 char timing[128];
                 snprintf(timing, sizeof(timing),
-                    "Stremio PS4: 120 frames wall %llums media %llums",
-                    static_cast<unsigned long long>(wallMs),
+                    "Stremio PS4: decode %llu.%llu fps, media %llums",
+                    static_cast<unsigned long long>(fpsTimesTen / 10),
+                    static_cast<unsigned long long>(fpsTimesTen % 10),
                     static_cast<unsigned long long>(avPlayer.currentTime()));
                 notify(timing);
                 playbackTimingReported = true;

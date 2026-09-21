@@ -24,6 +24,8 @@ rows directly into the framebuffer rather than calling a pixel function for
 every output pixel.
 Frame retrieval and NV12 conversion run on a worker thread so a blocking
 decoder call cannot reduce the 60 FPS controller and presentation loop.
+Shutdown joins that worker before stopping and closing AVPlayer, preventing a
+decoder/close race.
 It does not log in, load addons, or present decoded video/audio yet.
 
 M1 controller test controls:
