@@ -148,7 +148,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.18",
+        "StremioPS4/1.19",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -194,7 +194,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.18: deferred Home shutdown");
+    notify("Stremio PS4 1.19: safe playback exit controls");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -230,7 +230,6 @@ int main() {
     std::vector<uint32_t> previewPixels;
     uint32_t previewWidth = 0;
     uint32_t previewHeight = 0;
-    int homeExitFrames = -1;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -239,10 +238,17 @@ int main() {
         previousButtons = buttons;
 
         if ((pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-            DEBUGLOG << "Options pressed; draining video before Home";
-            avPlayer.stop();
-            previewVisible = false;
-            homeExitFrames = kFrameBuffers;
+            if (previewVisible ||
+                avPlayer.state() != AvPlayerProbe::State::Idle) {
+                DEBUGLOG << "Options pressed during playback; returning to shell";
+                avPlayer.stop();
+                previewVisible = false;
+                notify("Stremio PS4: playback stopped; Options again exits");
+            } else {
+                DEBUGLOG << "Options pressed from shell; navigating Home";
+                sceSystemServiceNavigateToGoHome();
+                return 0;
+            }
         }
 
         if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
@@ -370,13 +376,5 @@ int main() {
         scene.FrameBufferSwap();
         ++frameId;
 
-        if (homeExitFrames > 0) {
-            --homeExitFrames;
-            if (homeExitFrames == 0) {
-                sceSystemServiceNavigateToGoHome();
-                sceKernelUsleep(500000);
-                return 0;
-            }
-        }
     }
 }
