@@ -35,7 +35,7 @@ constexpr int kFrameBuffers = 2;
 constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
-constexpr const char* kLegalVideoPath = "/app0/assets/flower.mp4";
+constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
 
 int networkPoolId = 0;
 int sslContextId = 0;
@@ -161,7 +161,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.13",
+        "StremioPS4/1.14",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -207,7 +207,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.13: continuous silent playback");
+    notify("Stremio PS4 1.14: normal-motion playback timing");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -238,6 +238,8 @@ int main() {
     int avPlayerProbeFrames = 0;
     bool previewVisible = false;
     int previewBackgroundFrames = 0;
+    uint64_t playbackWallStart = 0;
+    bool playbackTimingReported = false;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -288,7 +290,9 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
             previewVisible = false;
             previewBackgroundFrames = 0;
-            notify("Stremio PS4: opening packaged CC0 H.264 video...");
+            playbackWallStart = 0;
+            playbackTimingReported = false;
+            notify("Stremio PS4: opening packaged Sintel H.264 trailer...");
             avPlayerProbeFrames = 0;
             if (!avPlayer.start(kLegalVideoPath)) {
                 char result[128];
@@ -331,6 +335,7 @@ int main() {
                 notify(result);
                 previewVisible = true;
                 previewBackgroundFrames = kFrameBuffers;
+                playbackWallStart = sceKernelGetProcessTime();
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
                 char result[128];
                 snprintf(result, sizeof(result),
@@ -347,6 +352,17 @@ int main() {
             drawDecodedPreview(scene, avPlayer, previewBackgroundFrames > 0);
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
+            }
+            if (!playbackTimingReported && avPlayer.decodedFrames() >= 120) {
+                const uint64_t wallMs =
+                    (sceKernelGetProcessTime() - playbackWallStart) / 1000;
+                char timing[128];
+                snprintf(timing, sizeof(timing),
+                    "Stremio PS4: 120 frames wall %llums media %llums",
+                    static_cast<unsigned long long>(wallMs),
+                    static_cast<unsigned long long>(avPlayer.currentTime()));
+                notify(timing);
+                playbackTimingReported = true;
             }
         } else {
             drawHardwareProbe(scene, focusedCard);

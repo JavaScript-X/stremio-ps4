@@ -103,6 +103,7 @@ bool AvPlayerProbe::start(const char* url) {
     preview_.clear();
     previewWidth_ = 0;
     previewHeight_ = 0;
+    decodedFrames_ = 0;
     started_ = false;
     paused_ = false;
     latestPlayerEvent = 0;
@@ -203,6 +204,7 @@ void AvPlayerProbe::update() {
         previewWidth_ = width_ / 2;
         previewHeight_ = height_ / 2;
         preview_.resize(static_cast<size_t>(previewWidth_) * previewHeight_);
+        ++decodedFrames_;
 
         const uint8_t* luma = frame.pData;
         const uint8_t* chroma = luma + static_cast<size_t>(width_) * height_;
@@ -249,4 +251,8 @@ void AvPlayerProbe::togglePause() {
     } else if (sceAvPlayerPause(handle_) >= 0) {
         paused_ = true;
     }
+}
+
+uint64_t AvPlayerProbe::currentTime() const {
+    return handle_ ? sceAvPlayerCurrentTime(handle_) : 0;
 }

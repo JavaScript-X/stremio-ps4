@@ -12,8 +12,8 @@ consoles. The project is currently at **M1: platform foundation**.
 
 The current hardware probe boots a native OpenOrbis application, initializes
 1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
-and can ask the PS4 AVPlayer to decode a frame from a packaged copy of Mozilla's
-CC0 H.264 test clip. Packaging the probe asset isolates hardware decoding from
+and can ask the PS4 AVPlayer to decode a packaged H.264 test clip. Packaging the
+probe asset isolates hardware decoding from
 the separate remote-stream transport path. Decoder textures use a dedicated
 GPU-visible direct-memory arena, as required by the PS4 AVPlayer ABI.
 Playback waits for AVPlayer's ready event before starting and uses its
@@ -96,8 +96,9 @@ $OO_PS4_TOOLCHAIN/samples/_common/sce_sys/about/right.sprx
 $OO_PS4_TOOLCHAIN/samples/_common/sce_sys/icon0.png
 ```
 
-The small `assets/flower.mp4` decoder probe is Mozilla's CC0 interactive-example
-video. It is included only as a deterministic hardware test asset.
+`assets/sintel-trailer.mp4` is the normal-motion Sintel trailer mirrored by W3C
+and is included only as a deterministic playback test. Sintel is copyright
+Blender Foundation and distributed under Creative Commons Attribution 3.0.
 
 Some OpenOrbis releases arrange these assets differently. If `make check`
 reports a missing path, set `RIGHT_SPRX` or `ICON0` explicitly:

@@ -119,6 +119,7 @@ int32_t sceAvPlayerEnableStream(SceAvPlayerHandle handle, uint32_t streamId);
 int32_t sceAvPlayerStart(SceAvPlayerHandle handle);
 int32_t sceAvPlayerPause(SceAvPlayerHandle handle);
 int32_t sceAvPlayerResume(SceAvPlayerHandle handle);
+uint64_t sceAvPlayerCurrentTime(SceAvPlayerHandle handle);
 int32_t sceAvPlayerStop(SceAvPlayerHandle handle);
 
 }  // extern "C"
@@ -142,6 +143,8 @@ public:
     uint32_t previewWidth() const { return previewWidth_; }
     uint32_t previewHeight() const { return previewHeight_; }
     bool paused() const { return paused_; }
+    uint64_t decodedFrames() const { return decodedFrames_; }
+    uint64_t currentTime() const;
 
 private:
     SceAvPlayerHandle handle_ = nullptr;
@@ -155,4 +158,5 @@ private:
     std::vector<uint32_t> preview_;
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;
+    uint64_t decodedFrames_ = 0;
 };
