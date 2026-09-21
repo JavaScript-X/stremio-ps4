@@ -9,18 +9,18 @@ BUILDDIR   := build
 DISTDIR    := dist
 TARGET     := stremio-ps4
 
-RIGHT_SPRX ?= $(COMMONDIR)/sce_sys/about/right.sprx
-ICON0      ?= $(COMMONDIR)/sce_sys/icon0.png
+RIGHT_SPRX ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/about/right.sprx
+ICON0      ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/icon0.png
 
-CC         := clang
-CXX        := clang++
-LD         := ld.lld
+CC         := clang-18
+CXX        := clang++-18
+LD         := ld.lld-18
 TOOLS      := $(TOOLCHAIN)/bin/linux
 
 LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule
 CFLAGS     := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
-CXXFLAGS   := $(CFLAGS) -std=c++17 -isystem $(TOOLCHAIN)/include/c++/v1 \
+CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \
 	-I$(COMMONDIR)
 LDFLAGS    := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x \
 	--eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
@@ -28,9 +28,16 @@ LDFLAGS    := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x \
 OBJECTS    := $(BUILDDIR)/main.o $(BUILDDIR)/graphics.o
 PACKAGE    := $(DISTDIR)/$(CONTENT_ID).pkg
 
-.PHONY: all check clean
+.PHONY: all prepare package check clean
 
-all: check $(PACKAGE)
+all: prepare
+
+prepare: check $(BUILDDIR)/pkg.gp4
+
+package:
+	@test -f "$(BUILDDIR)/pkg.gp4" || (echo "Run make prepare first"; exit 1)
+	mkdir -p $(DISTDIR)
+	$(TOOLS)/PkgTool.Core pkg_build $(BUILDDIR)/pkg.gp4 $(DISTDIR)
 
 check:
 	@test -n "$(OO_PS4_TOOLCHAIN)" || (echo "OO_PS4_TOOLCHAIN is not set"; exit 1)
@@ -85,4 +92,3 @@ $(PACKAGE): $(BUILDDIR)/pkg.gp4 | $(DISTDIR)
 
 clean:
 	rm -rf $(BUILDDIR) $(DISTDIR)
-

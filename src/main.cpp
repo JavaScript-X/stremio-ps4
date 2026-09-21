@@ -8,6 +8,11 @@
 
 std::stringstream debugLogStream;
 
+// OpenOrbis' shared Scene2D helper declares this destructor but v0.5.4 does
+// not provide its definition. The application owns the scene for its entire
+// process lifetime, so the default implementation is sufficient here.
+Scene2D::~Scene2D() = default;
+
 namespace {
 constexpr int kWidth = 1920;
 constexpr int kHeight = 1080;
@@ -66,4 +71,3 @@ int main() {
         ++frameId;
     }
 }
-

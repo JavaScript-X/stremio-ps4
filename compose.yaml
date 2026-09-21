@@ -6,4 +6,12 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+    command: make prepare
 
+  packager:
+    image: openorbisofficial/toolchain@sha256:f752d09f9d3227c729ee069f29a05450bd8fa4ef5e785c0929ab8479f7dc4e64
+    user: "0:0"
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: make package

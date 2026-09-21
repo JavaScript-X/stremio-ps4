@@ -31,7 +31,8 @@ See [docs/architecture.md](docs/architecture.md) for the intended design and
 
 - A jailbroken PS4 capable of installing homebrew PKGs
 - The [OpenOrbis PS4 Toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain)
-- A Linux environment or WSL with `clang`, `clang++`, `ld.lld`, and `make`
+- A Linux environment or WSL with LLVM 18 (`clang-18`, `clang++-18`,
+  `ld.lld-18`) and `make`
 - `OO_PS4_TOOLCHAIN` pointing to the OpenOrbis toolchain root
 
 The build uses OpenOrbis' `_common/graphics.cpp` at compile time. No OpenOrbis
@@ -49,6 +50,7 @@ SHA-256 before extracting it.
 ./scripts/fetch-openorbis.ps1
 docker compose build builder
 docker compose run --rm builder
+docker compose run --rm packager
 ```
 
 ### Existing OpenOrbis installation
@@ -59,6 +61,8 @@ make check
 make
 ```
 
+The builder produces the signed package metadata and executable. The packager
+uses OpenOrbis' official compatibility image for its legacy SSL/ICU runtime.
 The expected package is:
 
 ```text
