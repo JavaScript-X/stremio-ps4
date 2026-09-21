@@ -66,7 +66,7 @@ uses OpenOrbis' official compatibility image for its legacy SSL/ICU runtime.
 The expected package is:
 
 ```text
-dist/IV0000-BREWSTPS4_00-STREMIOPS4000000.pkg
+dist/IV0000-BREW00100_00-STREMIOPS4000000.pkg
 ```
 
 The package step needs the standard OpenOrbis runtime files at:
