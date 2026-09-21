@@ -30,8 +30,8 @@ M1 controller test controls:
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
 - **Circle** cancels an active AVPlayer probe.
-- After a successful decode, the first video frame is shown as a centered
-  preview. **Circle** returns from the preview to the shell.
+- After a successful decode, the video plays continuously as a centered
+  preview. **Cross** pauses/resumes and **Circle** stops and returns to the shell.
 - **Options** stops playback, returns to the PS4 home screen, and exits cleanly.
   Reopening the tile starts a fresh application instance.
 

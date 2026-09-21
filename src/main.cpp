@@ -70,16 +70,20 @@ void drawHardwareProbe(Scene2D& scene, int focusedCard) {
     scene.DrawRectangle(370, 786, 1180, 28, cardMuted);
 }
 
-void drawDecodedPreview(Scene2D& scene, const AvPlayerProbe& player) {
+void drawDecodedPreview(
+    Scene2D& scene,
+    const AvPlayerProbe& player,
+    bool paintBackground) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
-    scene.FrameBufferFill(background);
-
     const int width = static_cast<int>(player.previewWidth());
     const int height = static_cast<int>(player.previewHeight());
     const int startX = (kWidth - width) / 2;
     const int startY = (kHeight - height) / 2;
-    scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
+    if (paintBackground) {
+        scene.FrameBufferFill(background);
+        scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
+    }
 
     const auto& pixels = player.preview();
     for (int y = 0; y < height; ++y) {
@@ -157,7 +161,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.12",
+        "StremioPS4/1.13",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -203,7 +207,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.12: safe-exit frame preview");
+    notify("Stremio PS4 1.13: continuous silent playback");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -233,7 +237,7 @@ int main() {
     AvPlayerProbe::State previousPlayerState = AvPlayerProbe::State::Idle;
     int avPlayerProbeFrames = 0;
     bool previewVisible = false;
-    int previewBuffersToPaint = 0;
+    int previewBackgroundFrames = 0;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -254,7 +258,12 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3) {
             ++focusedCard;
         }
-        if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
+        if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && previewVisible) {
+            avPlayer.togglePause();
+            notify(avPlayer.paused()
+                ? "Stremio PS4: playback paused"
+                : "Stremio PS4: playback resumed");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
             notify("Stremio PS4: focused card activated");
         }
         if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
@@ -278,6 +287,7 @@ int main() {
         }
         if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
             previewVisible = false;
+            previewBackgroundFrames = 0;
             notify("Stremio PS4: opening packaged CC0 H.264 video...");
             avPlayerProbeFrames = 0;
             if (!avPlayer.start(kLegalVideoPath)) {
@@ -289,16 +299,16 @@ int main() {
                 notify(result);
             }
         }
-        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
+            avPlayer.stop();
+            avPlayerProbeFrames = 0;
+            previewVisible = false;
+            notify("Stremio PS4: playback stopped");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             avPlayer.state() != AvPlayerProbe::State::Idle) {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             notify("Stremio PS4: AVPlayer probe cancelled");
-        }
-        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
-            previewVisible = false;
-            previewBuffersToPaint = 0;
-            notify("Stremio PS4: returned to shell");
         }
 
         avPlayer.update();
@@ -320,8 +330,7 @@ int main() {
                     avPlayer.width(), avPlayer.height());
                 notify(result);
                 previewVisible = true;
-                previewBuffersToPaint = kFrameBuffers;
-                avPlayer.stop();
+                previewBackgroundFrames = kFrameBuffers;
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
                 char result[128];
                 snprintf(result, sizeof(result),
@@ -335,9 +344,9 @@ int main() {
         }
 
         if (previewVisible) {
-            if (previewBuffersToPaint > 0) {
-                drawDecodedPreview(scene, avPlayer);
-                --previewBuffersToPaint;
+            drawDecodedPreview(scene, avPlayer, previewBackgroundFrames > 0);
+            if (previewBackgroundFrames > 0) {
+                --previewBackgroundFrames;
             }
         } else {
             drawHardwareProbe(scene, focusedCard);

@@ -117,6 +117,8 @@ int32_t sceAvPlayerGetStreamInfo(
     SceAvPlayerStreamInfo* info);
 int32_t sceAvPlayerEnableStream(SceAvPlayerHandle handle, uint32_t streamId);
 int32_t sceAvPlayerStart(SceAvPlayerHandle handle);
+int32_t sceAvPlayerPause(SceAvPlayerHandle handle);
+int32_t sceAvPlayerResume(SceAvPlayerHandle handle);
 int32_t sceAvPlayerStop(SceAvPlayerHandle handle);
 
 }  // extern "C"
@@ -129,6 +131,7 @@ public:
     bool start(const char* url);
     void update();
     void stop();
+    void togglePause();
 
     State state() const { return state_; }
     int errorStage() const { return errorStage_; }
@@ -138,6 +141,7 @@ public:
     const std::vector<uint32_t>& preview() const { return preview_; }
     uint32_t previewWidth() const { return previewWidth_; }
     uint32_t previewHeight() const { return previewHeight_; }
+    bool paused() const { return paused_; }
 
 private:
     SceAvPlayerHandle handle_ = nullptr;
@@ -147,6 +151,7 @@ private:
     uint32_t width_ = 0;
     uint32_t height_ = 0;
     bool started_ = false;
+    bool paused_ = false;
     std::vector<uint32_t> preview_;
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;

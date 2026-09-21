@@ -104,6 +104,7 @@ bool AvPlayerProbe::start(const char* url) {
     previewWidth_ = 0;
     previewHeight_ = 0;
     started_ = false;
+    paused_ = false;
     latestPlayerEvent = 0;
 
     if (!initializeTexturePool()) {
@@ -152,7 +153,7 @@ bool AvPlayerProbe::start(const char* url) {
 }
 
 void AvPlayerProbe::update() {
-    if (!handle_ || state_ == State::Failed || state_ == State::Passed) {
+    if (!handle_ || state_ == State::Failed || paused_) {
         return;
     }
     constexpr int32_t kReadyEvent = 0x02;
@@ -234,4 +235,18 @@ void AvPlayerProbe::stop() {
     }
     state_ = State::Idle;
     started_ = false;
+    paused_ = false;
+}
+
+void AvPlayerProbe::togglePause() {
+    if (!handle_ || !started_) {
+        return;
+    }
+    if (paused_) {
+        if (sceAvPlayerResume(handle_) >= 0) {
+            paused_ = false;
+        }
+    } else if (sceAvPlayerPause(handle_) >= 0) {
+        paused_ = true;
+    }
 }

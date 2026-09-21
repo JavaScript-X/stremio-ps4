@@ -15,6 +15,7 @@
 - Persistent, non-secret settings
 - [x] Packaged CC0 MP4 H.264 hardware-decoder frame probe
 - [x] Decoded NV12-to-RGB preview
+- [ ] Continuous silent MP4 playback and pause/resume (console validation pending)
 - Legal HLS playback test asset
 
 ## M2 — Stremio browsing
