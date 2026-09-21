@@ -20,7 +20,8 @@ M1 controller test controls:
 
 - **Left/Right** moves the highlighted poster card.
 - **Cross** activates the focused card and shows a notification.
-- **Triangle** shows the next diagnostic action.
+- **Triangle** runs a certificate-verified HTTPS connectivity probe against
+  `https://www.stremio.com/` and reports the status code.
 - **Options** returns to the PS4 home screen.
 
 | Milestone | Scope | Status |

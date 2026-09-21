@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.03
+VERSION    := 1.04
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -20,7 +20,8 @@ LD         := ld.lld-18
 TOOLS      := $(TOOLCHAIN)/bin/linux
 
 LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule \
-	-lScePad -lSceUserService -lSceSysUtil -lSceSystemService
+	-lScePad -lSceUserService -lSceSysUtil -lSceSystemService \
+	-lSceNet -lSceSsl -lSceHttp
 CFLAGS     := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \

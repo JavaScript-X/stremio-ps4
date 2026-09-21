@@ -3,7 +3,11 @@
 #include <sstream>
 
 #include <orbis/libkernel.h>
+#include <orbis/Http.h>
+#include <orbis/Net.h>
 #include <orbis/Pad.h>
+#include <orbis/Ssl.h>
+#include <orbis/Sysmodule.h>
 #include <orbis/SystemService.h>
 #include <orbis/UserService.h>
 
@@ -28,6 +32,12 @@ constexpr int kPixelDepth = 4;
 constexpr int kFrameBuffers = 2;
 // Match the direct-memory pool used by OpenOrbis' working graphics sample.
 constexpr size_t kVideoMemory = 0xC000000;
+constexpr int kNetworkPoolSize = 64 * 1024;
+constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
+
+int networkPoolId = 0;
+int sslContextId = 0;
+int httpContextId = 0;
 
 void drawHardwareProbe(Scene2D& scene, int focusedCard) {
     const Color background = {18, 18, 24};
@@ -83,12 +93,91 @@ uint32_t readButtons(int pad) {
     OrbisPadData padData = {};
     return scePadReadState(pad, &padData) == 0 ? padData.buttons : 0;
 }
+
+bool initializeHttp() {
+    if (httpContextId > 0) {
+        return true;
+    }
+
+    if (static_cast<int32_t>(
+            sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NET)) < 0 ||
+        static_cast<int32_t>(
+            sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_HTTP)) < 0 ||
+        static_cast<int32_t>(
+            sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_SSL)) < 0) {
+        return false;
+    }
+
+    sceNetInit();
+    networkPoolId = sceNetPoolCreate("stremioNetPool", kNetworkPoolSize, 0);
+    if (networkPoolId < 0) {
+        return false;
+    }
+
+    sslContextId = sceSslInit(SSL_POOLSIZE);
+    if (sslContextId < 0) {
+        return false;
+    }
+
+    httpContextId = sceHttpInit(networkPoolId, sslContextId, LIBHTTP_POOLSIZE);
+    return httpContextId >= 0;
+}
+
+int probeStremioHttps() {
+    if (!initializeHttp()) {
+        return -1;
+    }
+
+    constexpr const char* kProbeUrl = "https://www.stremio.com/";
+    int templateId = sceHttpCreateTemplate(
+        httpContextId,
+        "StremioPS4/1.04",
+        ORBIS_HTTP_VERSION_1_1,
+        1);
+    if (templateId < 0) {
+        return -2;
+    }
+
+    sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
+
+    int connectionId = sceHttpCreateConnectionWithURL(templateId, kProbeUrl, false);
+    if (connectionId < 0) {
+        sceHttpDeleteTemplate(templateId);
+        return -3;
+    }
+
+    int requestId = sceHttpCreateRequestWithURL(
+        connectionId,
+        ORBIS_METHOD_GET,
+        kProbeUrl,
+        0);
+    if (requestId < 0) {
+        sceHttpDeleteConnection(connectionId);
+        sceHttpDeleteTemplate(templateId);
+        return -4;
+    }
+
+    int statusCode = -5;
+    if (sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
+        int responseStatus = 0;
+        if (sceHttpGetStatusCode(requestId, &responseStatus) >= 0) {
+            statusCode = responseStatus;
+        }
+    }
+
+    sceHttpDeleteRequest(requestId);
+    sceHttpDeleteConnection(connectionId);
+    sceHttpDeleteTemplate(templateId);
+    return statusCode;
+}
 }  // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.03: interactive UI test");
+    notify("Stremio PS4 1.04: controller + HTTPS test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -137,7 +226,23 @@ int main() {
             notify("Stremio PS4: focused card activated");
         }
         if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
-            notify("Stremio PS4: network probe comes next");
+            notify("Stremio PS4: running HTTPS probe...");
+            const int statusCode = probeStremioHttps();
+            char result[96];
+            if (statusCode >= 100) {
+                snprintf(
+                    result,
+                    sizeof(result),
+                    "Stremio PS4: HTTPS status %d",
+                    statusCode);
+            } else {
+                snprintf(
+                    result,
+                    sizeof(result),
+                    "Stremio PS4: HTTPS probe failed at stage %d",
+                    -statusCode);
+            }
+            notify(result);
         }
 
         drawHardwareProbe(scene, focusedCard);
