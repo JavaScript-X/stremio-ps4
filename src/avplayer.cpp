@@ -82,6 +82,12 @@ void releaseTexture(void*, void*) {
 void release(void*, void* pointer) {
     free(pointer);
 }
+
+uint8_t clampColor(int value) {
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return static_cast<uint8_t>(value);
+}
 }  // namespace
 
 AvPlayerProbe::~AvPlayerProbe() {
@@ -94,6 +100,9 @@ bool AvPlayerProbe::start(const char* url) {
     errorCode_ = 0;
     width_ = 0;
     height_ = 0;
+    preview_.clear();
+    previewWidth_ = 0;
+    previewHeight_ = 0;
     started_ = false;
     latestPlayerEvent = 0;
 
@@ -190,6 +199,29 @@ void AvPlayerProbe::update() {
     if (sceAvPlayerGetVideoData(handle_, &frame) && frame.pData) {
         width_ = frame.details.video.width;
         height_ = frame.details.video.height;
+        previewWidth_ = width_ / 2;
+        previewHeight_ = height_ / 2;
+        preview_.resize(static_cast<size_t>(previewWidth_) * previewHeight_);
+
+        const uint8_t* luma = frame.pData;
+        const uint8_t* chroma = luma + static_cast<size_t>(width_) * height_;
+        for (uint32_t py = 0; py < previewHeight_; ++py) {
+            const uint32_t y = py * 2;
+            for (uint32_t px = 0; px < previewWidth_; ++px) {
+                const uint32_t x = px * 2;
+                const int yy = luma[static_cast<size_t>(y) * width_ + x] - 16;
+                const size_t uv = static_cast<size_t>(y / 2) * width_ + x;
+                const int u = chroma[uv] - 128;
+                const int v = chroma[uv + 1] - 128;
+                const int r = (298 * yy + 409 * v + 128) >> 8;
+                const int g = (298 * yy - 100 * u - 208 * v + 128) >> 8;
+                const int b = (298 * yy + 516 * u + 128) >> 8;
+                preview_[static_cast<size_t>(py) * previewWidth_ + px] =
+                    (static_cast<uint32_t>(clampColor(r)) << 16) |
+                    (static_cast<uint32_t>(clampColor(g)) << 8) |
+                    clampColor(b);
+            }
+        }
         state_ = State::Passed;
     }
 }

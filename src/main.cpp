@@ -70,6 +70,30 @@ void drawHardwareProbe(Scene2D& scene, int focusedCard) {
     scene.DrawRectangle(370, 786, 1180, 28, cardMuted);
 }
 
+void drawDecodedPreview(Scene2D& scene, const AvPlayerProbe& player) {
+    const Color background = {8, 8, 12};
+    const Color border = {196, 174, 255};
+    scene.FrameBufferFill(background);
+
+    const int width = static_cast<int>(player.previewWidth());
+    const int height = static_cast<int>(player.previewHeight());
+    const int startX = (kWidth - width) / 2;
+    const int startY = (kHeight - height) / 2;
+    scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
+
+    const auto& pixels = player.preview();
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const uint32_t pixel = pixels[static_cast<size_t>(y) * width + x];
+            const Color color = {
+                static_cast<uint8_t>((pixel >> 16) & 0xff),
+                static_cast<uint8_t>((pixel >> 8) & 0xff),
+                static_cast<uint8_t>(pixel & 0xff)};
+            scene.DrawPixel(startX + x, startY + y, color);
+        }
+    }
+}
+
 void notify(const char* message) {
     sceSysUtilSendSystemNotificationWithText(222, message);
 }
@@ -133,7 +157,7 @@ int probeStremioHttps() {
     constexpr const char* kProbeUrl = "https://www.stremio.com/";
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.10",
+        "StremioPS4/1.11",
         ORBIS_HTTP_VERSION_1_1,
         1);
     if (templateId < 0) {
@@ -179,7 +203,7 @@ int probeStremioHttps() {
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.10: enabled-stream AVPlayer test");
+    notify("Stremio PS4 1.11: decoded-frame preview");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -208,6 +232,8 @@ int main() {
     AvPlayerProbe avPlayer;
     AvPlayerProbe::State previousPlayerState = AvPlayerProbe::State::Idle;
     int avPlayerProbeFrames = 0;
+    bool previewVisible = false;
+    int previewBuffersToPaint = 0;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -250,6 +276,7 @@ int main() {
             notify(result);
         }
         if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
+            previewVisible = false;
             notify("Stremio PS4: opening packaged CC0 H.264 video...");
             avPlayerProbeFrames = 0;
             if (!avPlayer.start(kLegalVideoPath)) {
@@ -266,6 +293,11 @@ int main() {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             notify("Stremio PS4: AVPlayer probe cancelled");
+        }
+        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
+            previewVisible = false;
+            previewBuffersToPaint = 0;
+            notify("Stremio PS4: returned to shell");
         }
 
         avPlayer.update();
@@ -286,6 +318,8 @@ int main() {
                     "Stremio PS4: decoded frame %ux%u",
                     avPlayer.width(), avPlayer.height());
                 notify(result);
+                previewVisible = true;
+                previewBuffersToPaint = kFrameBuffers;
                 avPlayer.stop();
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
                 char result[128];
@@ -299,7 +333,14 @@ int main() {
             previousPlayerState = avPlayer.state();
         }
 
-        drawHardwareProbe(scene, focusedCard);
+        if (previewVisible) {
+            if (previewBuffersToPaint > 0) {
+                drawDecodedPreview(scene, avPlayer);
+                --previewBuffersToPaint;
+            }
+        } else {
+            drawHardwareProbe(scene, focusedCard);
+        }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
