@@ -148,7 +148,8 @@ void drawDetails(
     Scene2D& scene,
     const MetaDetails& details,
     const PosterImage* poster,
-    const std::string& catalogType) {
+    const std::string& catalogType,
+    int episodeIndex) {
     const Color background = {18, 18, 24};
     const Color panel = {29, 29, 39};
     const Color purple = {123, 91, 214};
@@ -167,15 +168,36 @@ void drawDetails(
     scene.DrawText(540, 220, title.c_str(), text, 3);
     const std::string facts =
         (catalogType == "series" ? "SERIES   " : "MOVIE   ") +
-        details.releaseInfo + "   " + details.runtime;
+        details.releaseInfo + "   " + details.runtime +
+        (details.imdbRating.empty() ? "" : "   IMDB " + details.imdbRating);
     scene.DrawText(540, 285, facts.c_str(), muted, 2);
+    if (!details.genres.empty()) {
+        scene.DrawText(540, 325, details.genres.c_str(), muted, 2);
+    }
     const std::vector<std::string> lines =
         wrapText(details.description, 68, 13);
     for (size_t line = 0; line < lines.size(); ++line) {
-        scene.DrawText(540, 365 + static_cast<int>(line) * 38,
+        scene.DrawText(540, 375 + static_cast<int>(line) * 35,
             lines[line].c_str(), text, 2);
     }
-    scene.DrawText(130, 890, "CIRCLE BACK   L1/R1 CATALOGS", muted, 2);
+    if (!details.episodes.empty() && episodeIndex >= 0 &&
+        episodeIndex < static_cast<int>(details.episodes.size())) {
+        const MetaDetails::Episode& episode = details.episodes[episodeIndex];
+        char episodeText[192];
+        snprintf(episodeText, sizeof(episodeText),
+            "EPISODE S%d E%d   %d/%d%s%s",
+            episode.season, episode.episode, episodeIndex + 1,
+            static_cast<int>(details.episodes.size()),
+            episode.title.empty() ? "" : "   ", episode.title.c_str());
+        scene.DrawRectangle(520, 845, 1190, 60, panel);
+        scene.DrawText(545, 865, episodeText, text, 2);
+    }
+    scene.DrawText(
+        130, 945,
+        catalogType == "series"
+            ? "LEFT/RIGHT EPISODE   CROSS SELECT   CIRCLE BACK"
+            : "CIRCLE BACK   L1/R1 CATALOGS",
+        muted, 2);
 }
 
 void drawDecodedPreview(
@@ -380,21 +402,21 @@ int fetchPosters(
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
-    DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.30: catalog browser batch");
+    DEBUGLOG << "Stremio native client starting";
+    notify("Stremio 1.40: branding and episodes batch");
 
     const int pad = initializeController();
     notify(pad >= 0
-        ? "Stremio PS4: controller ready"
-        : "Stremio PS4: controller initialization failed");
+        ? "Stremio: controller ready"
+        : "Stremio: controller initialization failed");
 
     Scene2D scene(kWidth, kHeight, kPixelDepth);
     if (!scene.Init(kVideoMemory, kFrameBuffers)) {
         DEBUGLOG << "Video initialization failed";
-        notify("Stremio PS4: VIDEO INITIALIZATION FAILED");
+        notify("Stremio: VIDEO INITIALIZATION FAILED");
         for (;;) {
             if ((readButtons(pad) & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-                notify("Stremio PS4: use the PS button to go Home");
+                notify("Stremio: use the PS button to go Home");
                 sceKernelUsleep(500000);
             }
             sceKernelUsleep(16000);
@@ -402,7 +424,7 @@ int main() {
     }
 
     DEBUGLOG << "Video initialized at 1920x1080; rendering hardware probe";
-    notify("Stremio PS4: video ready");
+    notify("Stremio: video ready");
 
     int frameId = 1;
     int focusedCard = 0;
@@ -424,12 +446,13 @@ int main() {
     int catalogPage = 0;
     bool detailVisible = false;
     int detailPosterIndex = -1;
+    int detailEpisodeIndex = 0;
     MetaDetails details;
     scene.SetActiveFrameBuffer(0);
 
     auto loadActiveCatalog = [&]() {
         char loading[96];
-        snprintf(loading, sizeof(loading), "Stremio PS4: loading top %s...",
+        snprintf(loading, sizeof(loading), "Stremio: loading top %s...",
             catalogType == "series" ? "series" : "movies");
         notify(loading);
         catalogStatus = "LOADING CINEMETA...";
@@ -439,7 +462,7 @@ int main() {
         if (catalogResult > 0) {
             const int posterCount = fetchPosters(catalogItems, catalogPosters);
             snprintf(result, sizeof(result),
-                "Stremio PS4: loaded %d cards and %d posters",
+                "Stremio: loaded %d cards and %d posters",
                 catalogResult, posterCount);
             char visibleStatus[128];
             snprintf(visibleStatus, sizeof(visibleStatus),
@@ -449,12 +472,13 @@ int main() {
             catalogItems.clear();
             catalogPosters.clear();
             snprintf(result, sizeof(result),
-                "Stremio PS4: catalog failed at stage %d", -catalogResult);
+                "Stremio: catalog failed at stage %d", -catalogResult);
             catalogStatus = "CATALOG LOAD FAILED - PRESS TRIANGLE TO RETRY";
         }
         focusedCard = 0;
         catalogPage = 0;
         detailVisible = false;
+        detailEpisodeIndex = 0;
         notify(result);
     };
 
@@ -482,10 +506,10 @@ int main() {
                 DEBUGLOG << "Options pressed during playback; returning to shell";
                 avPlayer.stop();
                 previewVisible = false;
-                notify("Stremio PS4: playback stopped; Options again exits");
+                notify("Stremio: playback stopped; Options again exits");
             } else {
                 DEBUGLOG << "Options pressed from shell; Home API disabled";
-                notify("Stremio PS4: use the PS button to go Home");
+                notify("Stremio: use the PS button to go Home");
             }
         }
 
@@ -510,6 +534,15 @@ int main() {
             (pressed & ORBIS_PAD_BUTTON_UP) != 0) {
             catalogPage = 0;
         }
+        if (!previewVisible && detailVisible && catalogType == "series" &&
+            (pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && detailEpisodeIndex > 0) {
+            --detailEpisodeIndex;
+        }
+        if (!previewVisible && detailVisible && catalogType == "series" &&
+            (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
+            detailEpisodeIndex + 1 < static_cast<int>(details.episodes.size())) {
+            ++detailEpisodeIndex;
+        }
         if (!previewVisible &&
             (pressed & ORBIS_PAD_BUTTON_L1) != 0 && catalogType != "movie") {
             catalogType = "movie";
@@ -523,28 +556,38 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && previewVisible) {
             avPlayer.togglePause();
             notify(avPlayer.paused()
-                ? "Stremio PS4: playback paused"
-                : "Stremio PS4: playback resumed");
+                ? "Stremio: playback paused"
+                : "Stremio: playback resumed");
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && !detailVisible) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
-                notify("Stremio PS4: loading metadata details...");
+                notify("Stremio: loading metadata details...");
                 const int detailResult = fetchDetails(
                     catalogType, catalogItems[selectedIndex], details);
                 if (detailResult > 0) {
                     detailPosterIndex = selectedIndex;
+                    detailEpisodeIndex = 0;
                     detailVisible = true;
-                    notify("Stremio PS4: metadata details ready");
+                    notify("Stremio: metadata details ready");
                 } else {
                     char failure[96];
                     snprintf(failure, sizeof(failure),
-                        "Stremio PS4: metadata failed at stage %d",
+                        "Stremio: metadata failed at stage %d",
                         -detailResult);
                     notify(failure);
                 }
             } else {
-                notify("Stremio PS4: no item in this slot");
+                notify("Stremio: no item in this slot");
             }
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
+            catalogType == "series" && !details.episodes.empty()) {
+            const MetaDetails::Episode& episode =
+                details.episodes[detailEpisodeIndex];
+            char selected[128];
+            snprintf(selected, sizeof(selected),
+                "Stremio: selected season %d episode %d",
+                episode.season, episode.episode);
+            notify(selected);
         }
         if (!previewVisible &&
             (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
@@ -555,12 +598,12 @@ int main() {
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
             playbackTimingReported = false;
-            notify("Stremio PS4: opening packaged Sintel H.264 trailer...");
+            notify("Stremio: opening packaged Sintel H.264 trailer...");
             avPlayerProbeFrames = 0;
             if (!avPlayer.start(kLegalVideoPath)) {
                 char result[128];
                 snprintf(result, sizeof(result),
-                    "Stremio PS4: AVPlayer stage %d, code 0x%08x",
+                    "Stremio: AVPlayer stage %d, code 0x%08x",
                     avPlayer.errorStage(),
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
@@ -570,15 +613,15 @@ int main() {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             previewVisible = false;
-            notify("Stremio PS4: playback stopped");
+            notify("Stremio: playback stopped");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             avPlayer.state() != AvPlayerProbe::State::Idle) {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
-            notify("Stremio PS4: AVPlayer probe cancelled");
+            notify("Stremio: AVPlayer probe cancelled");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
             detailVisible = false;
-            notify("Stremio PS4: returned to catalog");
+            notify("Stremio: returned to catalog");
         }
 
         avPlayer.update();
@@ -587,16 +630,16 @@ int main() {
             ++avPlayerProbeFrames;
             if (avPlayerProbeFrames > 1200) {
                 avPlayer.stop();
-                notify("Stremio PS4: AVPlayer timed out before first frame");
+                notify("Stremio: AVPlayer timed out before first frame");
             }
         }
         if (avPlayer.state() != previousPlayerState) {
             if (avPlayer.state() == AvPlayerProbe::State::Decoding) {
-                notify("Stremio PS4: AVPlayer active; waiting for frame");
+                notify("Stremio: AVPlayer active; waiting for frame");
             } else if (avPlayer.state() == AvPlayerProbe::State::Passed) {
                 char result[96];
                 snprintf(result, sizeof(result),
-                    "Stremio PS4: decoded frame %ux%u",
+                    "Stremio: decoded frame %ux%u",
                     avPlayer.width(), avPlayer.height());
                 notify(result);
                 previewVisible = true;
@@ -605,7 +648,7 @@ int main() {
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
                 char result[128];
                 snprintf(result, sizeof(result),
-                    "Stremio PS4: AVPlayer stage %d, code 0x%08x",
+                    "Stremio: AVPlayer stage %d, code 0x%08x",
                     avPlayer.errorStage(),
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
@@ -630,7 +673,7 @@ int main() {
                     : 0;
                 char timing[128];
                 snprintf(timing, sizeof(timing),
-                    "Stremio PS4: decode %llu.%llu fps, media %llums",
+                    "Stremio: decode %llu.%llu fps, media %llums",
                     static_cast<unsigned long long>(fpsTimesTen / 10),
                     static_cast<unsigned long long>(fpsTimesTen % 10),
                     static_cast<unsigned long long>(avPlayer.currentTime()));
@@ -642,7 +685,8 @@ int main() {
                 detailPosterIndex >= 0 &&
                 detailPosterIndex < static_cast<int>(catalogPosters.size())
                 ? &catalogPosters[detailPosterIndex] : nullptr;
-            drawDetails(scene, details, poster, catalogType);
+            drawDetails(
+                scene, details, poster, catalogType, detailEpisodeIndex);
         } else {
             drawHardwareProbe(
                 scene, focusedCard, catalogPage, catalogType, catalogStatus,

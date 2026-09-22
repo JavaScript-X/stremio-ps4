@@ -11,11 +11,21 @@ struct CatalogItem {
 };
 
 struct MetaDetails {
+    struct Episode {
+        std::string id;
+        std::string title;
+        int season = 0;
+        int episode = 0;
+    };
+
     std::string id;
     std::string name;
     std::string description;
     std::string releaseInfo;
     std::string runtime;
+    std::string imdbRating;
+    std::string genres;
+    std::vector<Episode> episodes;
 };
 
 bool parseCatalogItems(

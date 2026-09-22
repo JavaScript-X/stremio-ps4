@@ -37,9 +37,11 @@ int main(int argc, char** argv) {
         (items.size() != 2 || items[0].name != "Movie \"One\"" ||
          items[1].id != "tt2")) return 2;
     MetaDetails details;
-    const std::string meta = R"({"meta":{"id":"tt1","name":"One","description":"A test.","releaseInfo":"2026","runtime":"90 min","nested":{"name":"wrong"}}})";
+    const std::string meta = R"({"meta":{"id":"tt1","name":"One","description":"A test.","releaseInfo":"2026","runtime":"90 min","imdbRating":"8.1","genres":["Drama","Sci-Fi"],"videos":[{"id":"tt1:1:1","title":"Pilot","season":1,"episode":1}],"nested":{"name":"wrong"}}})";
     if (!parseMetaDetails(meta, details) || details.name != "One" ||
-        details.description != "A test." || details.runtime != "90 min") return 3;
+        details.description != "A test." || details.runtime != "90 min" ||
+        details.imdbRating != "8.1" || details.genres != "Drama / Sci-Fi" ||
+        details.episodes.size() != 1 || details.episodes[0].episode != 1) return 3;
     std::cout << items.size() << " items; first=" << items[0].name << '\n';
     return 0;
 }

@@ -52,6 +52,80 @@ bool findStringField(
     size_t end = 0;
     return readJsonString(object, position, value, end);
 }
+
+bool findIntField(const std::string& object, const char* field, int& value) {
+    const std::string key = std::string("\"") + field + "\"";
+    size_t position = object.find(key);
+    if (position == std::string::npos) return false;
+    position = object.find(':', position + key.size());
+    if (position == std::string::npos) return false;
+    do { ++position; } while (position < object.size() &&
+        std::isspace(static_cast<unsigned char>(object[position])));
+    int parsed = 0;
+    bool found = false;
+    while (position < object.size() && std::isdigit(
+            static_cast<unsigned char>(object[position]))) {
+        found = true;
+        parsed = parsed * 10 + object[position++] - '0';
+    }
+    if (found) value = parsed;
+    return found;
+}
+
+bool findStringArrayField(
+    const std::string& object, const char* field, std::string& joined) {
+    const std::string key = std::string("\"") + field + "\"";
+    size_t position = object.find(key);
+    if (position == std::string::npos) return false;
+    position = object.find('[', position + key.size());
+    if (position == std::string::npos) return false;
+    joined.clear();
+    for (++position; position < object.size(); ++position) {
+        while (position < object.size() && object[position] != '"' &&
+               object[position] != ']') ++position;
+        if (position >= object.size() || object[position] == ']') break;
+        std::string value;
+        size_t end = 0;
+        if (!readJsonString(object, position, value, end)) return false;
+        if (!joined.empty()) joined += " / ";
+        joined += value;
+        position = end;
+    }
+    return !joined.empty();
+}
+
+void parseEpisodes(const std::string& object, std::vector<MetaDetails::Episode>& episodes) {
+    const size_t videos = object.find("\"videos\"");
+    if (videos == std::string::npos) return;
+    size_t position = object.find('[', videos);
+    if (position == std::string::npos) return;
+    bool inString = false;
+    bool escaped = false;
+    int depth = 0;
+    size_t start = std::string::npos;
+    for (++position; position < object.size() && episodes.size() < 256; ++position) {
+        const char current = object[position];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (current == '\\') escaped = true;
+            else if (current == '"') inString = false;
+            continue;
+        }
+        if (current == '"') inString = true;
+        else if (current == '{') {
+            if (depth++ == 0) start = position;
+        } else if (current == '}' && depth > 0 && --depth == 0) {
+            const std::string video = object.substr(start, position - start + 1);
+            MetaDetails::Episode episode;
+            if (findStringField(video, "id", episode.id) &&
+                findIntField(video, "season", episode.season) &&
+                findIntField(video, "episode", episode.episode)) {
+                findStringField(video, "title", episode.title);
+                episodes.push_back(episode);
+            }
+        } else if (current == ']' && depth == 0) break;
+    }
+}
 }  // namespace
 
 bool parseCatalogItems(
@@ -133,5 +207,8 @@ bool parseMetaDetails(const std::string& json, MetaDetails& details) {
     findStringField(object, "description", details.description);
     findStringField(object, "releaseInfo", details.releaseInfo);
     findStringField(object, "runtime", details.runtime);
+    findStringField(object, "imdbRating", details.imdbRating);
+    findStringArrayField(object, "genres", details.genres);
+    parseEpisodes(object, details.episodes);
     return true;
 }

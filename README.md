@@ -3,6 +3,10 @@
 An experimental, community-built Stremio client for jailbroken PlayStation 4
 consoles. The project is currently entering **M2: catalogs and metadata**.
 
+The installed PS4 application is titled **Stremio**. Its icon combines the
+official Stremio symbol with a small JavaScript-X creator badge; this remains
+an unofficial community client.
+
 > [!IMPORTANT]
 > This is an unofficial project and is not affiliated with or endorsed by
 > Stremio, Smart Code OOD, or Sony Interactive Entertainment. Use Stremio and
@@ -28,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.30 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 1.40 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -38,6 +42,8 @@ framebuffer, so the catalog no longer depends on notifications for identity.
 The browser automatically loads eight items, switches between Movies and
 Series, pages between two groups of four, and opens a native detail screen with
 release information, runtime, and a wrapped description.
+Detail screens also show IMDb rating and genres. Series metadata exposes up to
+256 episodes with Left/Right episode navigation and Cross selection.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
@@ -48,6 +54,8 @@ M1 controller test controls:
 - **Up/Down** switches between two pages of four items.
 - **Triangle** explicitly reloads the active catalog and its posters.
 - **Cross** opens the focused item's metadata detail screen.
+- On Series details, **Left/Right** browses episodes and **Cross** selects the
+  focused episode.
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.

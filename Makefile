@@ -1,5 +1,5 @@
-TITLE      := Stremio PS4
-VERSION    := 1.30
+TITLE      := Stremio
+VERSION    := 1.40
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -10,7 +10,7 @@ DISTDIR    := dist
 TARGET     := stremio-ps4
 
 RIGHT_SPRX ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/about/right.sprx
-ICON0      ?= $(TOOLCHAIN)/samples/hello_world/sce_sys/icon0.png
+ICON0      := assets/branding/icon0.png
 LIBC_PRX   ?= $(TOOLCHAIN)/samples/graphics/sce_module/libc.prx
 FIOS2_PRX  ?= $(TOOLCHAIN)/samples/graphics/sce_module/libSceFios2.prx
 TEST_VIDEO := assets/sintel-trailer.mp4
