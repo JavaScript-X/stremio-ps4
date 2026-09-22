@@ -28,9 +28,21 @@ struct MetaDetails {
     std::vector<Episode> episodes;
 };
 
+struct StreamItem {
+    std::string name;
+    std::string title;
+    std::string url;
+    std::string infoHash;
+    int fileIndex = -1;
+};
+
 bool parseCatalogItems(
     const std::string& json,
     std::vector<CatalogItem>& items,
     size_t maximumItems);
 
 bool parseMetaDetails(const std::string& json, MetaDetails& details);
+bool parseStreamItems(
+    const std::string& json,
+    std::vector<StreamItem>& streams,
+    size_t maximumItems);

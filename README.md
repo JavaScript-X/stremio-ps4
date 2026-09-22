@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.40 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 1.50 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -44,6 +44,11 @@ Series, pages between two groups of four, and opens a native detail screen with
 release information, runtime, and a wrapped description.
 Detail screens also show IMDb rating and genres. Series metadata exposes up to
 256 episodes with Left/Right episode navigation and Cross selection.
+The official Public Domain Movies addon is available as a third catalog. Its
+stream resources are parsed into a native results screen, where direct HTTPS
+streams are playable and torrent descriptors are identified as requiring the
+planned companion service. A separate legal remote Sintel probe tests AVPlayer
+HTTPS transport without involving torrent or copyrighted sources.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
@@ -51,6 +56,7 @@ M1 controller test controls:
 - **Left/Right** moves the highlighted poster card.
 - The default Movies catalog loads automatically at startup.
 - **L1/R1** switches between the Movies and Series catalogs.
+- **L2** opens the official Public Domain Movies addon catalog.
 - **Up/Down** switches between two pages of four items.
 - **Triangle** explicitly reloads the active catalog and its posters.
 - **Cross** opens the focused item's metadata detail screen.
@@ -59,6 +65,9 @@ M1 controller test controls:
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
+- **R2** runs the remote HTTPS AVPlayer probe using the legal Sintel trailer.
+- On a Public Domain detail page, **Cross** resolves addon streams. The stream
+  screen uses **Up/Down**, **Cross**, and **Circle**.
 - **Circle** cancels an active AVPlayer probe.
 - After a successful decode, the video plays continuously as a centered
   preview. **Cross** pauses/resumes and **Circle** stops and returns to the shell.

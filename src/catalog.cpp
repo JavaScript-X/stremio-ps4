@@ -89,7 +89,7 @@ bool findStringArrayField(
         if (!readJsonString(object, position, value, end)) return false;
         if (!joined.empty()) joined += " / ";
         joined += value;
-        position = end;
+        position = end - 1;
     }
     return !joined.empty();
 }
@@ -211,4 +211,45 @@ bool parseMetaDetails(const std::string& json, MetaDetails& details) {
     findStringArrayField(object, "genres", details.genres);
     parseEpisodes(object, details.episodes);
     return true;
+}
+
+bool parseStreamItems(
+    const std::string& json,
+    std::vector<StreamItem>& streams,
+    size_t maximumItems) {
+    streams.clear();
+    const size_t marker = json.find("\"streams\"");
+    if (marker == std::string::npos) return false;
+    size_t position = json.find('[', marker);
+    if (position == std::string::npos) return false;
+    bool inString = false;
+    bool escaped = false;
+    int depth = 0;
+    size_t start = std::string::npos;
+    for (++position; position < json.size() && streams.size() < maximumItems;
+         ++position) {
+        const char current = json[position];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (current == '\\') escaped = true;
+            else if (current == '"') inString = false;
+            continue;
+        }
+        if (current == '"') inString = true;
+        else if (current == '{') {
+            if (depth++ == 0) start = position;
+        } else if (current == '}' && depth > 0 && --depth == 0) {
+            const std::string object = json.substr(start, position - start + 1);
+            StreamItem stream;
+            findStringField(object, "name", stream.name);
+            findStringField(object, "title", stream.title);
+            findStringField(object, "url", stream.url);
+            findStringField(object, "infoHash", stream.infoHash);
+            findIntField(object, "fileIdx", stream.fileIndex);
+            if (!stream.url.empty() || !stream.infoHash.empty()) {
+                streams.push_back(stream);
+            }
+        } else if (current == ']' && depth == 0) break;
+    }
+    return !streams.empty();
 }

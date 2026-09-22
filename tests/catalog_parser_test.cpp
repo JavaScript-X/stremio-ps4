@@ -7,6 +7,18 @@
 #include "catalog.h"
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[1]) == "--streams") {
+        std::ifstream input(argv[2]);
+        const std::string json{
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()};
+        std::vector<StreamItem> streams;
+        if (!parseStreamItems(json, streams, 8)) return 6;
+        std::cout << "streams=" << streams.size()
+                  << "; first=" << streams[0].name
+                  << "; torrent=" << !streams[0].infoHash.empty() << '\n';
+        return 0;
+    }
     if (argc == 3 && std::string(argv[1]) == "--meta") {
         std::ifstream input(argv[2]);
         const std::string json{
@@ -41,7 +53,18 @@ int main(int argc, char** argv) {
     if (!parseMetaDetails(meta, details) || details.name != "One" ||
         details.description != "A test." || details.runtime != "90 min" ||
         details.imdbRating != "8.1" || details.genres != "Drama / Sci-Fi" ||
-        details.episodes.size() != 1 || details.episodes[0].episode != 1) return 3;
+        details.episodes.size() != 1 || details.episodes[0].episode != 1) {
+        std::cerr << "meta assertion: name=" << details.name
+                  << " rating=" << details.imdbRating
+                  << " genres=" << details.genres
+                  << " episodes=" << details.episodes.size() << '\n';
+        return 3;
+    }
+    std::vector<StreamItem> streams;
+    const std::string streamJson = R"({"streams":[{"name":"1080p","title":"Public","infoHash":"abc","fileIdx":1},{"name":"Direct","url":"https://example.com/video.mp4"}]})";
+    if (!parseStreamItems(streamJson, streams, 8) || streams.size() != 2 ||
+        streams[0].infoHash != "abc" || streams[0].fileIndex != 1 ||
+        streams[1].url.empty()) return 5;
     std::cout << items.size() << " items; first=" << items[0].name << '\n';
     return 0;
 }

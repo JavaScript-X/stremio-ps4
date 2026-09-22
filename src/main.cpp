@@ -40,6 +40,10 @@ constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
 constexpr const char* kCatalogBaseUrl =
     "https://cinemeta-catalogs.strem.io/top/catalog/";
 constexpr const char* kMetaBaseUrl = "https://v3-cinemeta.strem.io/meta/";
+constexpr const char* kPublicDomainBaseUrl =
+    "https://caching.stremio.net/publicdomainmovies.now.sh/";
+constexpr const char* kLegalRemoteVideoUrl =
+    "https://media.w3.org/2010/05/sintel/trailer.mp4";
 constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
 constexpr int kPosterWidth = 310;
@@ -111,7 +115,8 @@ void drawHardwareProbe(
     scene.DrawRectangle(370, 76, 690, 48, stremioPurple);
     scene.DrawText(
         392, 88,
-        catalogType == "series" ? "TOP SERIES" : "TOP MOVIES",
+        catalogType == "series" ? "TOP SERIES" :
+        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES"),
         text, 3);
     const int cardX[] = {370, 718, 1066, 1414};
     for (int index = 0; index < 4; ++index) {
@@ -135,10 +140,10 @@ void drawHardwareProbe(
     scene.DrawText(370, 690, status.c_str(), mutedText, 2);
     scene.DrawText(
         370, 760,
-        "L1 MOVIES   R1 SERIES   UP/DOWN PAGE   TRIANGLE RELOAD",
+        "L1 MOVIES   R1 SERIES   L2 PUBLIC DOMAIN   UP/DOWN PAGE",
         mutedText, 2);
     scene.DrawText(
-        370, 815, "CROSS DETAILS   SQUARE VIDEO TEST   CIRCLE BACK",
+        370, 815, "CROSS DETAILS   SQUARE LOCAL VIDEO   R2 REMOTE VIDEO",
         mutedText, 2);
     scene.DrawText(page == 0 ? 1630 : 1660, 88,
         page == 0 ? "PAGE 1/2" : "PAGE 2/2", mutedText, 2);
@@ -197,6 +202,41 @@ void drawDetails(
         catalogType == "series"
             ? "LEFT/RIGHT EPISODE   CROSS SELECT   CIRCLE BACK"
             : "CIRCLE BACK   L1/R1 CATALOGS",
+        muted, 2);
+}
+
+void drawStreams(
+    Scene2D& scene,
+    const MetaDetails& details,
+    const std::vector<StreamItem>& streams,
+    int focusedStream) {
+    const Color background = {18, 18, 24};
+    const Color panel = {35, 35, 46};
+    const Color purple = {123, 91, 214};
+    const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawRectangle(90, 70, 1740, 90, purple);
+    scene.DrawText(125, 96, "STREAMS", text, 4);
+    scene.DrawText(125, 190, details.name.c_str(), text, 3);
+    for (int index = 0; index < static_cast<int>(streams.size()) && index < 6;
+         ++index) {
+        const int y = 280 + index * 100;
+        if (index == focusedStream) {
+            scene.DrawRectangle(115, y - 8, 1690, 76, focus);
+        }
+        scene.DrawRectangle(125, y, 1670, 60, panel);
+        const StreamItem& stream = streams[index];
+        const std::string label = !stream.name.empty() ? stream.name :
+            (!stream.title.empty() ? stream.title : "STREAM");
+        scene.DrawText(155, y + 18, label.c_str(), text, 2);
+        scene.DrawText(900, y + 18,
+            stream.url.empty() ? "TORRENT - COMPANION REQUIRED" : "DIRECT HTTPS",
+            stream.url.empty() ? muted : text, 2);
+    }
+    scene.DrawText(125, 930,
+        "UP/DOWN SELECT   CROSS PLAY/INSPECT   CIRCLE DETAILS",
         muted, 2);
 }
 
@@ -342,9 +382,12 @@ int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
 int fetchCatalog(
     const std::string& catalogType,
     std::vector<CatalogItem>& items) {
-    if (catalogType != "movie" && catalogType != "series") return -10;
-    const std::string url =
-        std::string(kCatalogBaseUrl) + catalogType + "/top.json";
+    if (catalogType != "movie" && catalogType != "series" &&
+        catalogType != "publicdomain") return -10;
+    const std::string url = catalogType == "publicdomain"
+        ? std::string(kPublicDomainBaseUrl) +
+            "catalog/movie/publicdomainmovies.json"
+        : std::string(kCatalogBaseUrl) + catalogType + "/top.json";
     std::string body;
     const int bytes =
         downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
@@ -367,14 +410,30 @@ int fetchDetails(
     const std::string& catalogType,
     const CatalogItem& item,
     MetaDetails& details) {
-    if ((catalogType != "movie" && catalogType != "series") ||
+    if ((catalogType != "movie" && catalogType != "series" &&
+         catalogType != "publicdomain") ||
         !isSafeMetadataId(item.id)) return -10;
-    const std::string url = std::string(kMetaBaseUrl) + catalogType + "/" +
+    const std::string resourceType =
+        catalogType == "series" ? "series" : "movie";
+    const std::string url = std::string(kMetaBaseUrl) + resourceType + "/" +
         item.id + ".json";
     std::string body;
     const int bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
     if (bytes < 0) return bytes;
     return parseMetaDetails(body, details) ? 1 : -8;
+}
+
+int fetchPublicDomainStreams(
+    const std::string& videoId,
+    std::vector<StreamItem>& streams) {
+    if (!isSafeMetadataId(videoId)) return -10;
+    const std::string url = std::string(kPublicDomainBaseUrl) +
+        "stream/movie/" + videoId + ".json";
+    std::string body;
+    const int bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+    if (bytes < 0) return bytes;
+    return parseStreamItems(body, streams, 8)
+        ? static_cast<int>(streams.size()) : -8;
 }
 
 int fetchPosters(
@@ -403,7 +462,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.40: branding and episodes batch");
+    notify("Stremio 1.50: addon streams and remote playback");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -445,9 +504,12 @@ int main() {
     std::string catalogStatus = "LOADING CINEMETA...";
     int catalogPage = 0;
     bool detailVisible = false;
+    bool streamVisible = false;
     int detailPosterIndex = -1;
     int detailEpisodeIndex = 0;
+    int focusedStream = 0;
     MetaDetails details;
+    std::vector<StreamItem> streams;
     scene.SetActiveFrameBuffer(0);
 
     auto loadActiveCatalog = [&]() {
@@ -478,6 +540,7 @@ int main() {
         focusedCard = 0;
         catalogPage = 0;
         detailVisible = false;
+        streamVisible = false;
         detailEpisodeIndex = 0;
         notify(result);
     };
@@ -513,24 +576,24 @@ int main() {
             }
         }
 
-        if (!previewVisible && !detailVisible &&
+        if (!previewVisible && !detailVisible && !streamVisible &&
             (pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
             --focusedCard;
         }
-        if (!previewVisible && !detailVisible &&
+        if (!previewVisible && !detailVisible && !streamVisible &&
             (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
             catalogPage * 4 + focusedCard + 1 <
                 static_cast<int>(catalogItems.size())) {
             ++focusedCard;
         }
-        if (!previewVisible && !detailVisible &&
+        if (!previewVisible && !detailVisible && !streamVisible &&
             (pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
             catalogItems.size() > 4) {
             catalogPage = 1;
             if (catalogPage * 4 + focusedCard >=
                 static_cast<int>(catalogItems.size())) focusedCard = 0;
         }
-        if (!previewVisible && !detailVisible &&
+        if (!previewVisible && !detailVisible && !streamVisible &&
             (pressed & ORBIS_PAD_BUTTON_UP) != 0) {
             catalogPage = 0;
         }
@@ -543,6 +606,15 @@ int main() {
             detailEpisodeIndex + 1 < static_cast<int>(details.episodes.size())) {
             ++detailEpisodeIndex;
         }
+        if (!previewVisible && streamVisible &&
+            (pressed & ORBIS_PAD_BUTTON_UP) != 0 && focusedStream > 0) {
+            --focusedStream;
+        }
+        if (!previewVisible && streamVisible &&
+            (pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
+            focusedStream + 1 < static_cast<int>(streams.size())) {
+            ++focusedStream;
+        }
         if (!previewVisible &&
             (pressed & ORBIS_PAD_BUTTON_L1) != 0 && catalogType != "movie") {
             catalogType = "movie";
@@ -553,12 +625,19 @@ int main() {
             catalogType = "series";
             loadActiveCatalog();
         }
+        if (!previewVisible &&
+            (pressed & ORBIS_PAD_BUTTON_L2) != 0 &&
+            catalogType != "publicdomain") {
+            catalogType = "publicdomain";
+            loadActiveCatalog();
+        }
         if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && previewVisible) {
             avPlayer.togglePause();
             notify(avPlayer.paused()
                 ? "Stremio: playback paused"
                 : "Stremio: playback resumed");
-        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && !detailVisible) {
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+            !detailVisible && !streamVisible) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
                 notify("Stremio: loading metadata details...");
@@ -588,6 +667,37 @@ int main() {
                 "Stremio: selected season %d episode %d",
                 episode.season, episode.episode);
             notify(selected);
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
+            !streamVisible && catalogType == "publicdomain") {
+            notify("Stremio: resolving public-domain streams...");
+            const int streamResult =
+                fetchPublicDomainStreams(details.id, streams);
+            if (streamResult > 0) {
+                focusedStream = 0;
+                streamVisible = true;
+                notify("Stremio: stream results ready");
+            } else {
+                char failure[96];
+                snprintf(failure, sizeof(failure),
+                    "Stremio: stream lookup failed at stage %d", -streamResult);
+                notify(failure);
+            }
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && streamVisible &&
+            focusedStream < static_cast<int>(streams.size())) {
+            const StreamItem& stream = streams[focusedStream];
+            if (stream.url.empty()) {
+                notify("Stremio: torrent stream needs the companion service");
+            } else if (stream.url.compare(0, 8, "https://") == 0) {
+                previewVisible = false;
+                previewBackgroundFrames = 0;
+                playbackWallStart = 0;
+                playbackTimingReported = false;
+                avPlayerProbeFrames = 0;
+                notify("Stremio: opening direct HTTPS stream...");
+                avPlayer.start(stream.url.c_str());
+            } else {
+                notify("Stremio: rejected non-HTTPS direct stream");
+            }
         }
         if (!previewVisible &&
             (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
@@ -609,6 +719,22 @@ int main() {
                 notify(result);
             }
         }
+        if ((pressed & ORBIS_PAD_BUTTON_R2) != 0 && !previewVisible) {
+            previewVisible = false;
+            previewBackgroundFrames = 0;
+            playbackWallStart = 0;
+            playbackTimingReported = false;
+            avPlayerProbeFrames = 0;
+            notify("Stremio: opening legal remote HTTPS trailer...");
+            if (!avPlayer.start(kLegalRemoteVideoUrl)) {
+                char result[128];
+                snprintf(result, sizeof(result),
+                    "Stremio: remote AVPlayer stage %d, code 0x%08x",
+                    avPlayer.errorStage(),
+                    static_cast<unsigned int>(avPlayer.errorCode()));
+                notify(result);
+            }
+        }
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
@@ -619,6 +745,9 @@ int main() {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             notify("Stremio: AVPlayer probe cancelled");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && streamVisible) {
+            streamVisible = false;
+            notify("Stremio: returned to details");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
             detailVisible = false;
             notify("Stremio: returned to catalog");
@@ -680,6 +809,8 @@ int main() {
                 notify(timing);
                 playbackTimingReported = true;
             }
+        } else if (streamVisible) {
+            drawStreams(scene, details, streams, focusedStream);
         } else if (detailVisible) {
             const PosterImage* poster =
                 detailPosterIndex >= 0 &&
