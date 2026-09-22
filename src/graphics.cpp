@@ -1,6 +1,11 @@
 #include "graphics.h"
 
 #include <algorithm>
+#include <cmath>
+#include <string>
+
+#define STB_EASY_FONT_IMPLEMENTATION
+#include <stb_easy_font.h>
 
 namespace {
 uint32_t encode(Color color) {
@@ -135,5 +140,46 @@ void Scene2D::BlitRgb(
         for (int column = 0; column < width; ++column) {
             destination[column] = 0x80000000u | source[column];
         }
+    }
+}
+
+void Scene2D::DrawText(
+    int x, int y, const char* text, Color color, int scale) {
+    if (!text || scale <= 0) return;
+    std::string ascii(text);
+    if (ascii.empty()) return;
+    for (char& character : ascii) {
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (value < 32 || value > 126) character = '?';
+    }
+
+    struct Vertex {
+        float x;
+        float y;
+        float z;
+        uint8_t color[4];
+    };
+    static Vertex vertices[4096];
+    const int quads = stb_easy_font_print(
+        0.0f, 0.0f, &ascii[0], nullptr,
+        vertices, static_cast<int>(sizeof(vertices)));
+    for (int quad = 0; quad < quads; ++quad) {
+        float left = vertices[quad * 4].x;
+        float right = left;
+        float top = vertices[quad * 4].y;
+        float bottom = top;
+        for (int vertex = 1; vertex < 4; ++vertex) {
+            const Vertex& current = vertices[quad * 4 + vertex];
+            left = std::min(left, current.x);
+            right = std::max(right, current.x);
+            top = std::min(top, current.y);
+            bottom = std::max(bottom, current.y);
+        }
+        const int width = std::max(1, static_cast<int>(std::ceil(right - left)) * scale);
+        const int height = std::max(1, static_cast<int>(std::ceil(bottom - top)) * scale);
+        DrawRectangle(
+            x + static_cast<int>(left) * scale,
+            y + static_cast<int>(top) * scale,
+            width, height, color);
     }
 }

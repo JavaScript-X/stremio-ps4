@@ -46,9 +46,16 @@ int networkPoolId = 0;
 int sslContextId = 0;
 int httpContextId = 0;
 
+std::string shortTitle(const std::string& title) {
+    constexpr size_t kMaximumCharacters = 18;
+    if (title.size() <= kMaximumCharacters) return title;
+    return title.substr(0, kMaximumCharacters - 3) + "...";
+}
+
 void drawHardwareProbe(
     Scene2D& scene,
     int focusedCard,
+    const std::vector<CatalogItem>& items,
     const std::vector<PosterImage>& posters) {
     const Color background = {18, 18, 24};
     const Color sidebar = {29, 29, 39};
@@ -56,6 +63,8 @@ void drawHardwareProbe(
     const Color card = {45, 45, 58};
     const Color cardMuted = {35, 35, 46};
     const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
     scene.DrawRectangle(0, 0, 310, kHeight, sidebar);
@@ -63,8 +72,13 @@ void drawHardwareProbe(
     scene.DrawRectangle(48, 170, 214, 18, card);
     scene.DrawRectangle(48, 224, 170, 18, cardMuted);
     scene.DrawRectangle(48, 278, 194, 18, cardMuted);
+    scene.DrawText(68, 70, "STREMIO", text, 3);
+    scene.DrawText(68, 168, "HOME", mutedText, 2);
+    scene.DrawText(68, 222, "DISCOVER", mutedText, 2);
+    scene.DrawText(68, 276, "LIBRARY", mutedText, 2);
 
     scene.DrawRectangle(370, 76, 690, 48, stremioPurple);
+    scene.DrawText(392, 88, "TOP MOVIES", text, 3);
     const int cardX[] = {370, 718, 1066, 1414};
     for (int index = 0; index < 4; ++index) {
         if (index == focusedCard) {
@@ -75,6 +89,10 @@ void drawHardwareProbe(
             scene.BlitRgb(
                 cardX[index], 180, posters[index].width, posters[index].height,
                 posters[index].pixels.data());
+        }
+        if (index < static_cast<int>(items.size())) {
+            const std::string title = shortTitle(items[index].name);
+            scene.DrawText(cardX[index], 610, title.c_str(), text, 2);
         }
     }
 
@@ -256,7 +274,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.23: JPEG poster fallback");
+    notify("Stremio PS4 1.24: native catalog titles");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -443,7 +461,7 @@ int main() {
                 playbackTimingReported = true;
             }
         } else {
-            drawHardwareProbe(scene, focusedCard, catalogPosters);
+            drawHardwareProbe(scene, focusedCard, catalogItems, catalogPosters);
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);

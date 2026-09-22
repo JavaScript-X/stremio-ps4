@@ -27,6 +27,8 @@ public:
     void DrawPixel(int x, int y, Color color);
     void DrawRectangle(int x, int y, int width, int height, Color color);
     void BlitRgb(int x, int y, int width, int height, const uint32_t* pixels);
+    void DrawText(
+        int x, int y, const char* text, Color color, int scale = 2);
 
 private:
     bool initializeFlipQueue();
