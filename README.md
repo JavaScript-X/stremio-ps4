@@ -28,22 +28,27 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.24 adds the first Stremio addon-protocol catalog view: a bounded HTTPS
-download of Cinemeta's top-movies catalog, dependency-free parsing of four
+Version 1.30 adds a controller-driven Stremio catalog browser: bounded HTTPS
+downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
 remain compatible with the small decoder used by the native client.
 Movie titles and navigation labels are rasterized directly into the native
 framebuffer, so the catalog no longer depends on notifications for identity.
+The browser automatically loads eight items, switches between Movies and
+Series, pages between two groups of four, and opens a native detail screen with
+release information, runtime, and a wrapped description.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
 
 - **Left/Right** moves the highlighted poster card.
-- **Triangle** downloads and parses the Cinemeta top-movies catalog, then
-  downloads and renders up to four real movie posters.
-- **Cross** reports the title of the focused Cinemeta item after the catalog has
-  loaded.
+- The default Movies catalog loads automatically at startup.
+- **L1/R1** switches between the Movies and Series catalogs.
+- **Up/Down** switches between two pages of four items.
+- **Triangle** explicitly reloads the active catalog and its posters.
+- **Cross** opens the focused item's metadata detail screen.
+- **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
 - **Circle** cancels an active AVPlayer probe.

@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdint>
 #include <sstream>
@@ -35,9 +37,10 @@ constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
 constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
-constexpr const char* kCatalogUrl =
-    "https://cinemeta-catalogs.strem.io/top/catalog/movie/top.json";
-constexpr size_t kMaximumCatalogBytes = 512 * 1024;
+constexpr const char* kCatalogBaseUrl =
+    "https://cinemeta-catalogs.strem.io/top/catalog/";
+constexpr const char* kMetaBaseUrl = "https://v3-cinemeta.strem.io/meta/";
+constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
@@ -52,9 +55,37 @@ std::string shortTitle(const std::string& title) {
     return title.substr(0, kMaximumCharacters - 3) + "...";
 }
 
+std::vector<std::string> wrapText(
+    const std::string& text, size_t maximumCharacters, size_t maximumLines) {
+    std::string normalized = text;
+    for (char& character : normalized) {
+        if (std::isspace(static_cast<unsigned char>(character))) character = ' ';
+    }
+    std::vector<std::string> lines;
+    size_t position = 0;
+    while (position < normalized.size() && lines.size() < maximumLines) {
+        while (position < normalized.size() && normalized[position] == ' ') ++position;
+        size_t end = std::min(normalized.size(), position + maximumCharacters);
+        if (end < normalized.size()) {
+            const size_t space = normalized.rfind(' ', end);
+            if (space != std::string::npos && space > position) end = space;
+        }
+        if (end <= position) break;
+        lines.push_back(normalized.substr(position, end - position));
+        position = end;
+    }
+    if (position < normalized.size() && !lines.empty() && lines.back().size() > 3) {
+        lines.back().replace(lines.back().size() - 3, 3, "...");
+    }
+    return lines;
+}
+
 void drawHardwareProbe(
     Scene2D& scene,
     int focusedCard,
+    int page,
+    const std::string& catalogType,
+    const std::string& status,
     const std::vector<CatalogItem>& items,
     const std::vector<PosterImage>& posters) {
     const Color background = {18, 18, 24};
@@ -78,27 +109,73 @@ void drawHardwareProbe(
     scene.DrawText(68, 276, "LIBRARY", mutedText, 2);
 
     scene.DrawRectangle(370, 76, 690, 48, stremioPurple);
-    scene.DrawText(392, 88, "TOP MOVIES", text, 3);
+    scene.DrawText(
+        392, 88,
+        catalogType == "series" ? "TOP SERIES" : "TOP MOVIES",
+        text, 3);
     const int cardX[] = {370, 718, 1066, 1414};
     for (int index = 0; index < 4; ++index) {
+        const int itemIndex = page * 4 + index;
         if (index == focusedCard) {
             scene.DrawRectangle(cardX[index] - 8, 172, 326, 426, focus);
         }
         scene.DrawRectangle(cardX[index], 180, 310, 410, card);
-        if (index < static_cast<int>(posters.size()) && posters[index].valid()) {
+        if (itemIndex < static_cast<int>(posters.size()) &&
+            posters[itemIndex].valid()) {
             scene.BlitRgb(
-                cardX[index], 180, posters[index].width, posters[index].height,
-                posters[index].pixels.data());
+                cardX[index], 180, posters[itemIndex].width,
+                posters[itemIndex].height, posters[itemIndex].pixels.data());
         }
-        if (index < static_cast<int>(items.size())) {
-            const std::string title = shortTitle(items[index].name);
+        if (itemIndex < static_cast<int>(items.size())) {
+            const std::string title = shortTitle(items[itemIndex].name);
             scene.DrawText(cardX[index], 610, title.c_str(), text, 2);
         }
     }
 
-    scene.DrawRectangle(370, 654, 1354, 28, cardMuted);
-    scene.DrawRectangle(370, 720, 1030, 28, cardMuted);
-    scene.DrawRectangle(370, 786, 1180, 28, cardMuted);
+    scene.DrawText(370, 690, status.c_str(), mutedText, 2);
+    scene.DrawText(
+        370, 760,
+        "L1 MOVIES   R1 SERIES   UP/DOWN PAGE   TRIANGLE RELOAD",
+        mutedText, 2);
+    scene.DrawText(
+        370, 815, "CROSS DETAILS   SQUARE VIDEO TEST   CIRCLE BACK",
+        mutedText, 2);
+    scene.DrawText(page == 0 ? 1630 : 1660, 88,
+        page == 0 ? "PAGE 1/2" : "PAGE 2/2", mutedText, 2);
+}
+
+void drawDetails(
+    Scene2D& scene,
+    const MetaDetails& details,
+    const PosterImage* poster,
+    const std::string& catalogType) {
+    const Color background = {18, 18, 24};
+    const Color panel = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawRectangle(90, 70, 1740, 90, purple);
+    scene.DrawText(125, 96, "DETAILS", text, 4);
+    scene.DrawRectangle(90, 190, 390, 610, panel);
+    if (poster && poster->valid()) {
+        scene.BlitRgb(130, 230, poster->width, poster->height,
+            poster->pixels.data());
+    }
+    const std::string title = details.name.size() > 42
+        ? details.name.substr(0, 39) + "..." : details.name;
+    scene.DrawText(540, 220, title.c_str(), text, 3);
+    const std::string facts =
+        (catalogType == "series" ? "SERIES   " : "MOVIE   ") +
+        details.releaseInfo + "   " + details.runtime;
+    scene.DrawText(540, 285, facts.c_str(), muted, 2);
+    const std::vector<std::string> lines =
+        wrapText(details.description, 68, 13);
+    for (size_t line = 0; line < lines.size(); ++line) {
+        scene.DrawText(540, 365 + static_cast<int>(line) * 38,
+            lines[line].c_str(), text, 2);
+    }
+    scene.DrawText(130, 890, "CIRCLE BACK   L1/R1 CATALOGS", muted, 2);
 }
 
 void drawDecodedPreview(
@@ -240,12 +317,42 @@ int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
     return result;
 }
 
-int fetchCatalog(std::vector<CatalogItem>& items) {
+int fetchCatalog(
+    const std::string& catalogType,
+    std::vector<CatalogItem>& items) {
+    if (catalogType != "movie" && catalogType != "series") return -10;
+    const std::string url =
+        std::string(kCatalogBaseUrl) + catalogType + "/top.json";
     std::string body;
-    const int bytes = downloadUrl(kCatalogUrl, kMaximumCatalogBytes, body);
+    const int bytes =
+        downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
     if (bytes < 0) return bytes;
-    return parseCatalogItems(body, items, 4)
+    return parseCatalogItems(body, items, 8)
         ? static_cast<int>(items.size()) : -8;
+}
+
+bool isSafeMetadataId(const std::string& id) {
+    if (id.empty() || id.size() > 96) return false;
+    for (char character : id) {
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '-' && character != '_' &&
+            character != ':' && character != '.') return false;
+    }
+    return true;
+}
+
+int fetchDetails(
+    const std::string& catalogType,
+    const CatalogItem& item,
+    MetaDetails& details) {
+    if ((catalogType != "movie" && catalogType != "series") ||
+        !isSafeMetadataId(item.id)) return -10;
+    const std::string url = std::string(kMetaBaseUrl) + catalogType + "/" +
+        item.id + ".json";
+    std::string body;
+    const int bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+    if (bytes < 0) return bytes;
+    return parseMetaDetails(body, details) ? 1 : -8;
 }
 
 int fetchPosters(
@@ -274,7 +381,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.24: native catalog titles");
+    notify("Stremio PS4 1.30: catalog browser batch");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -312,7 +419,57 @@ int main() {
     uint32_t previewHeight = 0;
     std::vector<CatalogItem> catalogItems;
     std::vector<PosterImage> catalogPosters;
+    std::string catalogType = "movie";
+    std::string catalogStatus = "LOADING CINEMETA...";
+    int catalogPage = 0;
+    bool detailVisible = false;
+    int detailPosterIndex = -1;
+    MetaDetails details;
     scene.SetActiveFrameBuffer(0);
+
+    auto loadActiveCatalog = [&]() {
+        char loading[96];
+        snprintf(loading, sizeof(loading), "Stremio PS4: loading top %s...",
+            catalogType == "series" ? "series" : "movies");
+        notify(loading);
+        catalogStatus = "LOADING CINEMETA...";
+        catalogPosters.clear();
+        const int catalogResult = fetchCatalog(catalogType, catalogItems);
+        char result[192];
+        if (catalogResult > 0) {
+            const int posterCount = fetchPosters(catalogItems, catalogPosters);
+            snprintf(result, sizeof(result),
+                "Stremio PS4: loaded %d cards and %d posters",
+                catalogResult, posterCount);
+            char visibleStatus[128];
+            snprintf(visibleStatus, sizeof(visibleStatus),
+                "%d ITEMS   %d POSTERS   ONLINE", catalogResult, posterCount);
+            catalogStatus = visibleStatus;
+        } else {
+            catalogItems.clear();
+            catalogPosters.clear();
+            snprintf(result, sizeof(result),
+                "Stremio PS4: catalog failed at stage %d", -catalogResult);
+            catalogStatus = "CATALOG LOAD FAILED - PRESS TRIANGLE TO RETRY";
+        }
+        focusedCard = 0;
+        catalogPage = 0;
+        detailVisible = false;
+        notify(result);
+    };
+
+    // Present both framebuffers before the synchronous first load so the user
+    // sees a responsive loading shell instead of a black screen.
+    for (int initialFrame = 0; initialFrame < kFrameBuffers; ++initialFrame) {
+        drawHardwareProbe(
+            scene, focusedCard, catalogPage, catalogType, catalogStatus,
+            catalogItems, catalogPosters);
+        scene.SubmitFlip(frameId);
+        scene.FrameWait(frameId);
+        scene.FrameBufferSwap();
+        ++frameId;
+    }
+    loadActiveCatalog();
 
     for (;;) {
         const uint32_t buttons = readButtons(pad);
@@ -332,49 +489,66 @@ int main() {
             }
         }
 
-        if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
+        if (!previewVisible && !detailVisible &&
+            (pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
             --focusedCard;
         }
-        if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3) {
+        if (!previewVisible && !detailVisible &&
+            (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
+            catalogPage * 4 + focusedCard + 1 <
+                static_cast<int>(catalogItems.size())) {
             ++focusedCard;
+        }
+        if (!previewVisible && !detailVisible &&
+            (pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
+            catalogItems.size() > 4) {
+            catalogPage = 1;
+            if (catalogPage * 4 + focusedCard >=
+                static_cast<int>(catalogItems.size())) focusedCard = 0;
+        }
+        if (!previewVisible && !detailVisible &&
+            (pressed & ORBIS_PAD_BUTTON_UP) != 0) {
+            catalogPage = 0;
+        }
+        if (!previewVisible &&
+            (pressed & ORBIS_PAD_BUTTON_L1) != 0 && catalogType != "movie") {
+            catalogType = "movie";
+            loadActiveCatalog();
+        }
+        if (!previewVisible &&
+            (pressed & ORBIS_PAD_BUTTON_R1) != 0 && catalogType != "series") {
+            catalogType = "series";
+            loadActiveCatalog();
         }
         if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && previewVisible) {
             avPlayer.togglePause();
             notify(avPlayer.paused()
                 ? "Stremio PS4: playback paused"
                 : "Stremio PS4: playback resumed");
-        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
-            if (focusedCard < static_cast<int>(catalogItems.size())) {
-                char selected[192];
-                snprintf(selected, sizeof(selected),
-                    "Stremio PS4: selected %s",
-                    catalogItems[focusedCard].name.c_str());
-                notify(selected);
+        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && !detailVisible) {
+            const int selectedIndex = catalogPage * 4 + focusedCard;
+            if (selectedIndex < static_cast<int>(catalogItems.size())) {
+                notify("Stremio PS4: loading metadata details...");
+                const int detailResult = fetchDetails(
+                    catalogType, catalogItems[selectedIndex], details);
+                if (detailResult > 0) {
+                    detailPosterIndex = selectedIndex;
+                    detailVisible = true;
+                    notify("Stremio PS4: metadata details ready");
+                } else {
+                    char failure[96];
+                    snprintf(failure, sizeof(failure),
+                        "Stremio PS4: metadata failed at stage %d",
+                        -detailResult);
+                    notify(failure);
+                }
             } else {
-                notify("Stremio PS4: load Cinemeta first with Triangle");
+                notify("Stremio PS4: no item in this slot");
             }
         }
-        if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
-            notify("Stremio PS4: loading Cinemeta top movies...");
-            const int catalogResult = fetchCatalog(catalogItems);
-            char result[192];
-            if (catalogResult > 0) {
-                const int posterCount = fetchPosters(catalogItems, catalogPosters);
-                snprintf(
-                    result,
-                    sizeof(result),
-                    "Stremio PS4: loaded %d cards, %d posters; first is %s",
-                    catalogResult,
-                    posterCount,
-                    catalogItems[0].name.c_str());
-            } else {
-                snprintf(
-                    result,
-                    sizeof(result),
-                    "Stremio PS4: catalog failed at stage %d",
-                    -catalogResult);
-            }
-            notify(result);
+        if (!previewVisible &&
+            (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
+            loadActiveCatalog();
         }
         if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
             previewVisible = false;
@@ -402,6 +576,9 @@ int main() {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             notify("Stremio PS4: AVPlayer probe cancelled");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
+            detailVisible = false;
+            notify("Stremio PS4: returned to catalog");
         }
 
         avPlayer.update();
@@ -460,8 +637,16 @@ int main() {
                 notify(timing);
                 playbackTimingReported = true;
             }
+        } else if (detailVisible) {
+            const PosterImage* poster =
+                detailPosterIndex >= 0 &&
+                detailPosterIndex < static_cast<int>(catalogPosters.size())
+                ? &catalogPosters[detailPosterIndex] : nullptr;
+            drawDetails(scene, details, poster, catalogType);
         } else {
-            drawHardwareProbe(scene, focusedCard, catalogItems, catalogPosters);
+            drawHardwareProbe(
+                scene, focusedCard, catalogPage, catalogType, catalogStatus,
+                catalogItems, catalogPosters);
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);

@@ -98,3 +98,40 @@ bool parseCatalogItems(
     }
     return !items.empty();
 }
+
+bool parseMetaDetails(const std::string& json, MetaDetails& details) {
+    details = {};
+    const size_t meta = json.find("\"meta\"");
+    if (meta == std::string::npos) return false;
+    const size_t objectStart = json.find('{', meta);
+    if (objectStart == std::string::npos) return false;
+
+    bool inString = false;
+    bool escaped = false;
+    int depth = 0;
+    size_t objectEnd = std::string::npos;
+    for (size_t position = objectStart; position < json.size(); ++position) {
+        const char current = json[position];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (current == '\\') escaped = true;
+            else if (current == '"') inString = false;
+            continue;
+        }
+        if (current == '"') inString = true;
+        else if (current == '{') ++depth;
+        else if (current == '}' && --depth == 0) {
+            objectEnd = position;
+            break;
+        }
+    }
+    if (objectEnd == std::string::npos) return false;
+    const std::string object =
+        json.substr(objectStart, objectEnd - objectStart + 1);
+    if (!findStringField(object, "id", details.id) ||
+        !findStringField(object, "name", details.name)) return false;
+    findStringField(object, "description", details.description);
+    findStringField(object, "releaseInfo", details.releaseInfo);
+    findStringField(object, "runtime", details.runtime);
+    return true;
+}
