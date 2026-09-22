@@ -238,9 +238,12 @@ int fetchPosters(
     int loaded = 0;
     for (size_t index = 0; index < items.size(); ++index) {
         if (items[index].poster.compare(0, 8, "https://") != 0) continue;
+        std::string posterUrl = items[index].poster;
+        posterUrl += posterUrl.find('?') == std::string::npos
+            ? "?format=jpg" : "&format=jpg";
         std::string encoded;
         if (downloadUrl(
-                items[index].poster.c_str(), kMaximumPosterBytes, encoded) >= 0 &&
+                posterUrl.c_str(), kMaximumPosterBytes, encoded) >= 0 &&
             decodePosterJpeg(
                 encoded, kPosterWidth, kPosterHeight, posters[index])) {
             ++loaded;
@@ -253,7 +256,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.22: Cinemeta poster test");
+    notify("Stremio PS4 1.23: JPEG poster fallback");
 
     const int pad = initializeController();
     notify(pad >= 0

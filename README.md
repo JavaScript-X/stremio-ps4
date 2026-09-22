@@ -28,9 +28,11 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.22 adds the first Stremio addon-protocol catalog view: a bounded HTTPS
+Version 1.23 adds the first Stremio addon-protocol catalog view: a bounded HTTPS
 download of Cinemeta's top-movies catalog, dependency-free parsing of four
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
+Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
+remain compatible with the small decoder used by the native client.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
