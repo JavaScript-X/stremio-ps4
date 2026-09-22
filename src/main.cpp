@@ -17,6 +17,7 @@
 #include "log.h"
 #include "avplayer.h"
 #include "catalog.h"
+#include "poster.h"
 
 std::stringstream debugLogStream;
 
@@ -37,12 +38,18 @@ constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
 constexpr const char* kCatalogUrl =
     "https://cinemeta-catalogs.strem.io/top/catalog/movie/top.json";
 constexpr size_t kMaximumCatalogBytes = 512 * 1024;
+constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
+constexpr int kPosterWidth = 310;
+constexpr int kPosterHeight = 410;
 
 int networkPoolId = 0;
 int sslContextId = 0;
 int httpContextId = 0;
 
-void drawHardwareProbe(Scene2D& scene, int focusedCard) {
+void drawHardwareProbe(
+    Scene2D& scene,
+    int focusedCard,
+    const std::vector<PosterImage>& posters) {
     const Color background = {18, 18, 24};
     const Color sidebar = {29, 29, 39};
     const Color stremioPurple = {123, 91, 214};
@@ -64,6 +71,11 @@ void drawHardwareProbe(Scene2D& scene, int focusedCard) {
             scene.DrawRectangle(cardX[index] - 8, 172, 326, 426, focus);
         }
         scene.DrawRectangle(cardX[index], 180, 310, 410, card);
+        if (index < static_cast<int>(posters.size()) && posters[index].valid()) {
+            scene.BlitRgb(
+                cardX[index], 180, posters[index].width, posters[index].height,
+                posters[index].pixels.data());
+        }
     }
 
     scene.DrawRectangle(370, 654, 1354, 28, cardMuted);
@@ -146,26 +158,21 @@ bool initializeHttp() {
     return httpContextId >= 0;
 }
 
-int probeStremioHttps() {
-    if (!initializeHttp()) {
-        return -1;
-    }
-
-    constexpr const char* kProbeUrl = "https://www.stremio.com/";
+int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
+    body.clear();
+    if (!url || !initializeHttp()) return -1;
     int templateId = sceHttpCreateTemplate(
         httpContextId,
-        "StremioPS4/1.20",
+        "StremioPS4/1.22",
         ORBIS_HTTP_VERSION_1_1,
         1);
-    if (templateId < 0) {
-        return -2;
-    }
+    if (templateId < 0) return -2;
 
     sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
     sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
     sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
 
-    int connectionId = sceHttpCreateConnectionWithURL(templateId, kProbeUrl, false);
+    int connectionId = sceHttpCreateConnectionWithURL(templateId, url, false);
     if (connectionId < 0) {
         sceHttpDeleteTemplate(templateId);
         return -3;
@@ -174,45 +181,8 @@ int probeStremioHttps() {
     int requestId = sceHttpCreateRequestWithURL(
         connectionId,
         ORBIS_METHOD_GET,
-        kProbeUrl,
+        url,
         0);
-    if (requestId < 0) {
-        sceHttpDeleteConnection(connectionId);
-        sceHttpDeleteTemplate(templateId);
-        return -4;
-    }
-
-    int statusCode = -5;
-    if (sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
-        int responseStatus = 0;
-        if (sceHttpGetStatusCode(requestId, &responseStatus) >= 0) {
-            statusCode = responseStatus;
-        }
-    }
-
-    sceHttpDeleteRequest(requestId);
-    sceHttpDeleteConnection(connectionId);
-    sceHttpDeleteTemplate(templateId);
-    return statusCode;
-}
-
-int fetchCatalog(std::vector<CatalogItem>& items) {
-    if (!initializeHttp()) return -1;
-    int templateId = sceHttpCreateTemplate(
-        httpContextId, "StremioPS4/1.21", ORBIS_HTTP_VERSION_1_1, 1);
-    if (templateId < 0) return -2;
-    sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
-    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
-    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
-
-    int connectionId =
-        sceHttpCreateConnectionWithURL(templateId, kCatalogUrl, false);
-    if (connectionId < 0) {
-        sceHttpDeleteTemplate(templateId);
-        return -3;
-    }
-    int requestId = sceHttpCreateRequestWithURL(
-        connectionId, ORBIS_METHOD_GET, kCatalogUrl, 0);
     if (requestId < 0) {
         sceHttpDeleteConnection(connectionId);
         sceHttpDeleteTemplate(templateId);
@@ -223,24 +193,20 @@ int fetchCatalog(std::vector<CatalogItem>& items) {
     if (sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
         int status = 0;
         if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
-            std::string body;
             body.reserve(64 * 1024);
             char chunk[8192];
-            result = -6;
             for (;;) {
                 const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
                 if (bytes < 0) {
-                    result = -7;
+                    result = -6;
                     break;
                 }
                 if (bytes == 0) {
-                    result = parseCatalogItems(body, items, 4)
-                        ? static_cast<int>(items.size()) : -8;
+                    result = static_cast<int>(body.size());
                     break;
                 }
-                if (body.size() + static_cast<size_t>(bytes) >
-                    kMaximumCatalogBytes) {
-                    result = -9;
+                if (body.size() + static_cast<size_t>(bytes) > maximumBytes) {
+                    result = -7;
                     break;
                 }
                 body.append(chunk, static_cast<size_t>(bytes));
@@ -255,12 +221,39 @@ int fetchCatalog(std::vector<CatalogItem>& items) {
     sceHttpDeleteTemplate(templateId);
     return result;
 }
+
+int fetchCatalog(std::vector<CatalogItem>& items) {
+    std::string body;
+    const int bytes = downloadUrl(kCatalogUrl, kMaximumCatalogBytes, body);
+    if (bytes < 0) return bytes;
+    return parseCatalogItems(body, items, 4)
+        ? static_cast<int>(items.size()) : -8;
+}
+
+int fetchPosters(
+    const std::vector<CatalogItem>& items,
+    std::vector<PosterImage>& posters) {
+    posters.clear();
+    posters.resize(items.size());
+    int loaded = 0;
+    for (size_t index = 0; index < items.size(); ++index) {
+        if (items[index].poster.compare(0, 8, "https://") != 0) continue;
+        std::string encoded;
+        if (downloadUrl(
+                items[index].poster.c_str(), kMaximumPosterBytes, encoded) >= 0 &&
+            decodePosterJpeg(
+                encoded, kPosterWidth, kPosterHeight, posters[index])) {
+            ++loaded;
+        }
+    }
+    return loaded;
+}
 }  // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio PS4 M0 starting";
-    notify("Stremio PS4 1.21: Cinemeta catalog test");
+    notify("Stremio PS4 1.22: Cinemeta poster test");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -297,6 +290,7 @@ int main() {
     uint32_t previewWidth = 0;
     uint32_t previewHeight = 0;
     std::vector<CatalogItem> catalogItems;
+    std::vector<PosterImage> catalogPosters;
     scene.SetActiveFrameBuffer(0);
 
     for (;;) {
@@ -344,11 +338,13 @@ int main() {
             const int catalogResult = fetchCatalog(catalogItems);
             char result[192];
             if (catalogResult > 0) {
+                const int posterCount = fetchPosters(catalogItems, catalogPosters);
                 snprintf(
                     result,
                     sizeof(result),
-                    "Stremio PS4: loaded %d cards; first is %s",
+                    "Stremio PS4: loaded %d cards, %d posters; first is %s",
                     catalogResult,
+                    posterCount,
                     catalogItems[0].name.c_str());
             } else {
                 snprintf(
@@ -444,7 +440,7 @@ int main() {
                 playbackTimingReported = true;
             }
         } else {
-            drawHardwareProbe(scene, focusedCard);
+            drawHardwareProbe(scene, focusedCard, catalogPosters);
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);

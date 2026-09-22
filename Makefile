@@ -1,5 +1,5 @@
 TITLE      := Stremio PS4
-VERSION    := 1.21
+VERSION    := 1.22
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -26,12 +26,12 @@ LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule \
 CFLAGS     := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \
-	-I$(COMMONDIR)
+	-I$(COMMONDIR) -I$(TOOLCHAIN)/include/stb
 LDFLAGS    := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x \
 	--eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
 
 OBJECTS    := $(BUILDDIR)/main.o $(BUILDDIR)/avplayer.o \
-	$(BUILDDIR)/graphics.o $(BUILDDIR)/catalog.o
+	$(BUILDDIR)/graphics.o $(BUILDDIR)/catalog.o $(BUILDDIR)/poster.o
 PACKAGE    := $(DISTDIR)/$(CONTENT_ID).pkg
 
 .PHONY: all prepare package check clean
@@ -68,6 +68,9 @@ $(BUILDDIR)/graphics.o: src/graphics.cpp src/graphics.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/catalog.o: src/catalog.cpp src/catalog.h | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(BUILDDIR)/poster.o: src/poster.cpp src/poster.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/$(TARGET).elf: $(OBJECTS)
