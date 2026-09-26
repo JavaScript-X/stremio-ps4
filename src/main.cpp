@@ -518,7 +518,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.70: smoother playback and live decode FPS");
+    notify("Stremio 1.80: optimized 24 FPS video pipeline");
 
     const int pad = initializeController();
     notify(pad >= 0

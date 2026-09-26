@@ -1,5 +1,5 @@
 TITLE      := Stremio
-VERSION    := 1.70
+VERSION    := 1.80
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -23,7 +23,8 @@ TOOLS      := $(TOOLCHAIN)/bin/linux
 LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule \
 	-lScePad -lSceUserService -lSceSysUtil -lSceSystemService \
 	-lSceNet -lSceSsl -lSceHttp -lSceAvPlayer
-CFLAGS     := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c \
+CFLAGS     := --target=x86_64-pc-freebsd12-elf -O2 -DNDEBUG \
+	-fPIC -funwind-tables -c \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS   := $(CFLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 \
 	-I$(COMMONDIR) -I$(TOOLCHAIN)/include/stb
@@ -46,6 +47,7 @@ package:
 	$(TOOLS)/PkgTool.Core pkg_build $(BUILDDIR)/pkg.gp4 $(DISTDIR)
 
 check:
+	@echo "Release optimization: -O2"
 	@test -n "$(OO_PS4_TOOLCHAIN)" || (echo "OO_PS4_TOOLCHAIN is not set"; exit 1)
 	@test -f "$(TOOLCHAIN)/link.x" || (echo "OpenOrbis link.x not found"; exit 1)
 	@test -f "$(COMMONDIR)/graphics.cpp" || (echo "OpenOrbis common graphics source not found"; exit 1)

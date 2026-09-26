@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.70 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 1.80 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -57,6 +57,10 @@ The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies
 while keeping the interface and controller loop at 60 FPS.
+The PS4 release objects are compiled with `-O2`; this is essential for the
+scalar NV12-to-RGB conversion loop to sustain the test video's native 24 FPS
+on the console CPU. The build check prints the active release optimization so
+an accidental unoptimized package is visible in CI and local build logs.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
