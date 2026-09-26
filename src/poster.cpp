@@ -54,3 +54,59 @@ bool decodePosterJpeg(
     stbi_image_free(decoded);
     return true;
 }
+
+void preparePosterPresentation(
+    PosterImage& poster, int cornerRadius,
+    int previewWidth, int previewHeight) {
+    if (!poster.valid() || cornerRadius <= 0 ||
+        previewWidth <= 0 || previewHeight <= 0) return;
+    auto insideRounded = [](int x, int y, int width, int height, int radius) {
+        const int cx = x < radius ? radius :
+            (x >= width - radius ? width - radius - 1 : x);
+        const int cy = y < radius ? radius :
+            (y >= height - radius ? height - radius - 1 : y);
+        const int dx = x - cx;
+        const int dy = y - cy;
+        return dx * dx + dy * dy <= radius * radius;
+    };
+    for (int y = 0; y < poster.height; ++y) {
+        for (int x = 0; x < poster.width; ++x) {
+            if (!insideRounded(x, y, poster.width, poster.height, cornerRadius))
+                poster.pixels[static_cast<size_t>(y) * poster.width + x] =
+                    0x01000000u;
+        }
+    }
+    poster.previewWidth = previewWidth;
+    poster.previewHeight = previewHeight;
+    poster.previewPixels.resize(
+        static_cast<size_t>(previewWidth) * previewHeight);
+    constexpr uint32_t opacity = 72;
+    constexpr uint32_t inverse = 255 - opacity;
+    for (int y = 0; y < previewHeight; ++y) {
+        const int sourceY = y * poster.height / previewHeight;
+        for (int x = 0; x < previewWidth; ++x) {
+            const size_t destination = static_cast<size_t>(y) * previewWidth + x;
+            if (!insideRounded(x, y, previewWidth, previewHeight, 16)) {
+                poster.previewPixels[destination] =
+                    (18u << 16) | (18u << 8) | 24u;
+                continue;
+            }
+            const uint32_t source = poster.pixels[
+                static_cast<size_t>(sourceY) * poster.width +
+                x * poster.width / previewWidth];
+            if ((source & 0xff000000u) != 0) {
+                poster.previewPixels[destination] =
+                    (18u << 16) | (18u << 8) | 24u;
+                continue;
+            }
+            const uint32_t red = (((source >> 16) & 255) * opacity +
+                18 * inverse) / 255;
+            const uint32_t green = (((source >> 8) & 255) * opacity +
+                18 * inverse) / 255;
+            const uint32_t blue = ((source & 255) * opacity +
+                24 * inverse) / 255;
+            poster.previewPixels[destination] =
+                (red << 16) | (green << 8) | blue;
+        }
+    }
+}

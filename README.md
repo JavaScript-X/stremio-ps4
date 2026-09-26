@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.00 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.10 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -40,7 +40,7 @@ remain compatible with the small decoder used by the native client.
 Movie titles and navigation labels are rasterized directly into the native
 framebuffer, so the catalog no longer depends on notifications for identity.
 An animated top bar exposes Movies, Series, Public Domain, Search, and Settings
-through R1/R2. Digital and analog trigger input are both recognized. Catalogs
+through L1/R1. Catalogs
 preload two eight-item batches, show the next row as faint animated rounded
 cards, and fetch ahead as Down approaches the loaded boundary. Page changes
 slide into place while selected cards use a soft rounded focus animation.
@@ -74,7 +74,7 @@ Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.
 - The default Movies catalog loads automatically at startup.
-- **R1/R2** moves forward/backward through the five animated top tabs.
+- **R1** moves right and **L1** moves left through the five animated top tabs.
 - **Up/Down** continuously scrolls catalog pages and fetches more at the end.
 - **Triangle** explicitly reloads the active catalog and its posters.
 - **Cross** opens the focused item's metadata detail screen.

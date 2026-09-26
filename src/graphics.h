@@ -29,6 +29,8 @@ public:
     void DrawRoundedRectangle(
         int x, int y, int width, int height, int radius, Color color);
     void BlitRgb(int x, int y, int width, int height, const uint32_t* pixels);
+    void BlitRgbMasked(
+        int x, int y, int width, int height, const uint32_t* pixels);
     void BlitRgbRounded(
         int x, int y, int width, int height, int radius,
         const uint32_t* pixels, uint8_t opacity = 255);

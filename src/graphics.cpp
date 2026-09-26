@@ -187,15 +187,33 @@ void Scene2D::DrawRoundedRectangle(
 
 void Scene2D::BlitRgb(
     int x, int y, int width, int height, const uint32_t* pixels) {
-    if (!pixels || x < 0 || y < 0 || x + width > width_ || y + height > height_) {
-        return;
+    if (!pixels || width <= 0 || height <= 0) return;
+    const int firstRow = std::max(0, -y);
+    const int lastRow = std::min(height, height_ - y);
+    const int firstColumn = std::max(0, -x);
+    const int lastColumn = std::min(width, width_ - x);
+    if (firstRow >= lastRow || firstColumn >= lastColumn) return;
+    uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
+    for (int row = firstRow; row < lastRow; ++row) {
+        uint32_t* destination = buffer + static_cast<size_t>(y + row) * width_ + x;
+        const uint32_t* source = pixels + static_cast<size_t>(row) * width;
+        for (int column = firstColumn; column < lastColumn; ++column) {
+            destination[column] = 0x80000000u | source[column];
+        }
     }
+}
+
+void Scene2D::BlitRgbMasked(
+    int x, int y, int width, int height, const uint32_t* pixels) {
+    if (!pixels || x < 0 || y < 0 || x + width > width_ || y + height > height_)
+        return;
     uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
     for (int row = 0; row < height; ++row) {
         uint32_t* destination = buffer + static_cast<size_t>(y + row) * width_ + x;
         const uint32_t* source = pixels + static_cast<size_t>(row) * width;
         for (int column = 0; column < width; ++column) {
-            destination[column] = 0x80000000u | source[column];
+            if ((source[column] & 0xff000000u) == 0)
+                destination[column] = 0x80000000u | source[column];
         }
     }
 }

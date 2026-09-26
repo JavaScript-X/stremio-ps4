@@ -136,7 +136,7 @@ void drawHardwareProbe(
     }
     scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
         stremioPurple);
-    scene.DrawText(1690, 52, "R1/R2", mutedText, 2);
+    scene.DrawText(1670, 52, "L1 / R1", mutedText, 2);
 
     scene.DrawRectangle(120, 170, 690, 48, stremioPurple);
     scene.DrawText(
@@ -159,8 +159,8 @@ void drawHardwareProbe(
             itemIndex < static_cast<int>(items.size()) ? card : cardMuted);
         if (itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid()) {
-            scene.BlitRgbRounded(cardX[index], cardY, posters[itemIndex].width,
-                posters[itemIndex].height, 18, posters[itemIndex].pixels.data());
+            scene.BlitRgbMasked(cardX[index], cardY, posters[itemIndex].width,
+                posters[itemIndex].height, posters[itemIndex].pixels.data());
         }
         if (itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
@@ -176,17 +176,17 @@ void drawHardwareProbe(
         const int x = 170 + index * 430;
         scene.DrawRoundedRectangle(x, previewY, 220, 290, 16, cardMuted);
         if (itemIndex < static_cast<int>(posters.size()) &&
-            posters[itemIndex].valid()) {
-            scene.BlitRgbScaledRounded(x, previewY, 220, 290, 16,
-                posters[itemIndex].pixels.data(), posters[itemIndex].width,
-                posters[itemIndex].height, 72);
+            posters[itemIndex].previewValid()) {
+            scene.BlitRgb(x, previewY, posters[itemIndex].previewWidth,
+                posters[itemIndex].previewHeight,
+                posters[itemIndex].previewPixels.data());
         }
     }
 
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
     scene.DrawText(
         120, 775,
-        "R1/R2 TABS   LEFT/RIGHT SELECT   UP/DOWN CONTINUOUS SCROLL",
+        "L1/R1 TABS   LEFT/RIGHT SELECT   UP/DOWN CONTINUOUS SCROLL",
         mutedText, 2);
     scene.DrawText(
         1150, 775, "CROSS DETAILS   SQUARE LOCAL VIDEO",
@@ -248,7 +248,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "LOCAL H.264 PLAYBACK TEST",
         "CACHED HTTPS PLAYBACK TEST",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.00"};
+        "ABOUT STREMIO PS4  v2.10"};
     for (int index = 0; index < 4; ++index) {
         const int y = 300 + index * 125;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -256,7 +256,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         scene.DrawText(155, y + 22, rows[index], text, 2);
     }
     scene.DrawText(120, 900,
-        "UP/DOWN SELECT   CROSS RUN   R1/R2 CHANGE TAB", muted, 2);
+        "UP/DOWN SELECT   CROSS RUN   L1/R1 CHANGE TAB", muted, 2);
 }
 
 void drawDetails(
@@ -311,7 +311,7 @@ void drawDetails(
         130, 945,
         catalogType == "series"
             ? "LEFT/RIGHT EPISODE   CROSS SELECT   CIRCLE BACK"
-            : "CIRCLE BACK   R1/R2 TOP TABS",
+            : "CIRCLE BACK   L1/R1 TOP TABS",
         muted, 2);
 }
 
@@ -483,6 +483,8 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
     settings.inputMethod = ORBIS__DEFAULT;
     settings.maxTextLength = 64;
     settings.inputTextBuffer = reinterpret_cast<wchar_t*>(buffer);
+    settings.posx = 960.0f;
+    settings.posy = 540.0f;
     settings.horizontalAlignment = ORBIS_H_CENTER;
     settings.verticalAlignment = ORBIS_V_CENTER;
     settings.placeholder = reinterpret_cast<const wchar_t*>(placeholder);
@@ -756,6 +758,7 @@ int fetchPosters(
                 posterUrl.c_str(), kMaximumPosterBytes, encoded) >= 0 &&
             decodePosterJpeg(
                 encoded, kPosterWidth, kPosterHeight, posters[index])) {
+            preparePosterPresentation(posters[index], 18, 220, 290);
             ++loaded;
         }
     }
@@ -781,7 +784,7 @@ int appendCatalogPage(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 2.00: system keyboard and polished catalog UI");
+    notify("Stremio 2.10: fast catalog UI and centered keyboard");
 
     int userId = -1;
     const int pad = initializeController(userId);
@@ -969,17 +972,17 @@ int main() {
             (activeTab == 3 && searchShowingResults);
         if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
             selectTab(activeTab + 1);
-        } else if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R2) != 0) {
+        } else if (shellVisible && (pressed & ORBIS_PAD_BUTTON_L1) != 0) {
             selectTab(activeTab - 1);
         }
 
         const int tabTargets[kTopTabCount] = {350, 570, 790, 1130, 1380};
         const int indicatorDelta = tabTargets[activeTab] - indicatorX;
         if (indicatorDelta != 0) {
-            if (indicatorDelta >= -4 && indicatorDelta <= 4) {
+            if (indicatorDelta >= -8 && indicatorDelta <= 8) {
                 indicatorX = tabTargets[activeTab];
             } else {
-                indicatorX += indicatorDelta / 4;
+                indicatorX += indicatorDelta / 2;
             }
         }
 
@@ -1018,14 +1021,14 @@ int main() {
                 }
                 if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
                     catalogPage = nextPage;
-                    catalogMotion = 90;
+                    catalogMotion = 48;
                     if (catalogPage * 4 + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
-                catalogMotion = -90;
+                catalogMotion = -48;
             }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
@@ -1045,7 +1048,7 @@ int main() {
                 notify("Stremio: search query cleared");
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 3) {
-                notify("Stremio PS4 v2.00 - JavaScript-X community build");
+                notify("Stremio PS4 v2.10 - JavaScript-X community build");
             }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
@@ -1286,7 +1289,7 @@ int main() {
         ++frameId;
         ++animationFrame;
         if (catalogMotion != 0) {
-            catalogMotion = catalogMotion * 3 / 4;
+            catalogMotion /= 2;
             if (catalogMotion > -2 && catalogMotion < 2) catalogMotion = 0;
         }
 
