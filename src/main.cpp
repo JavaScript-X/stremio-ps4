@@ -48,8 +48,10 @@ const char* const kVideoTestPaths[] = {
     "/app0/assets/sintel-360p.mp4",
     kLegalVideoPath,
     "/app0/assets/sintel-720p.mp4",
-    "/app0/assets/sintel-1080p.mp4"};
-const char* const kVideoTestNames[] = {"360P", "854X480", "720P", "1080P"};
+    "/app0/assets/sintel-1080p.mp4",
+    "/app0/assets/sintel-1080p-high.mp4"};
+const char* const kVideoTestNames[] = {
+    "360P", "854X480", "720P", "1080P BASELINE", "1080P HIGH"};
 constexpr const char* kCatalogBaseUrl =
     "https://cinemeta-catalogs.strem.io/top/catalog/";
 constexpr const char* kMetaBaseUrl = "https://v3-cinemeta.strem.io/meta/";
@@ -391,9 +393,10 @@ void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
         "LOCAL H.264  640x360",
         "LOCAL H.264  854x480",
         "LOCAL H.264  1280x720",
-        "LOCAL H.264  1920x1080",
+        "LOCAL H.264  1920x1080 BASELINE L4.0",
+        "LOCAL H.264  1920x1080 HIGH L4.1",
         "CACHED HTTPS H.264  854x480"};
-    drawSettingsRows(scene, rows, 5, selected, indicatorX,
+    drawSettingsRows(scene, rows, 6, selected, indicatorX,
         decodeOnly ? "DECODE-ONLY / SELECT QUALITY" :
             "RGB PREVIEW / SELECT QUALITY", "RUN");
 }
@@ -1519,7 +1522,7 @@ int main() {
             }
         } else if (shellVisible && activeTab == 4) {
             const int maximumSelection = settingsPage == 0 ? 2 :
-                (settingsPage == 1 ? 1 : (settingsPage == 2 ? 4 : 0));
+                (settingsPage == 1 ? 1 : (settingsPage == 2 ? 5 : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
@@ -1636,7 +1639,7 @@ int main() {
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
-            (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 3);
+            (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 4);
         if (localPlaybackRequested) {
             stopBackgroundForPlayback();
             previewVisible = false;
@@ -1666,7 +1669,7 @@ int main() {
             }
             queuedPlaybackTest = -1;
         }
-        const bool remotePlaybackRequested = queuedPlaybackTest == 4;
+        const bool remotePlaybackRequested = queuedPlaybackTest == 5;
         if (remotePlaybackRequested) {
             stopBackgroundForPlayback();
             previewVisible = false;
