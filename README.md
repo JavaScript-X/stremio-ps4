@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.62 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.63 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -93,6 +93,10 @@ the previously validated 720p conversion path, and reduces only the 1080p
 diagnostic surface to 480x270. The app now releases its pad handle before
 opening Sony's IME and reacquires it afterward, giving the system keyboard
 exclusive controller ownership for its standard button layout.
+Version 2.63 keeps infinite-scroll poster prefetch suspended for the complete
+AVPlayer lifetime, including its opening phase. This prevents the catalog's
+network, JPEG, and cache worker from silently restarting while a local or
+remote playback benchmark is running.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

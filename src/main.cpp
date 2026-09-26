@@ -354,7 +354,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.62"};
+        "ABOUT STREMIO PS4  v2.63"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -1127,7 +1127,8 @@ int main() {
     auto startPagePrefetch = [&]() {
         if (activeTab >= 3 || pageJob.running.load(std::memory_order_acquire) ||
             pageJob.completed.load(std::memory_order_acquire) ||
-            catalogWorkersBusy() || catalogItems.empty()) return;
+            catalogWorkersBusy() || catalogItems.empty() ||
+            avPlayer.state() != AvPlayerProbe::State::Idle) return;
         pageJob.type = catalogType;
         pageJob.skip = static_cast<int>(catalogItems.size());
         pageJob.completed.store(false, std::memory_order_release);
