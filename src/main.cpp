@@ -354,7 +354,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.61"};
+        "ABOUT STREMIO PS4  v2.62"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -1051,7 +1051,7 @@ int main() {
     signal(SIGINT, requestExit);
     DEBUGLOG << "Stremio native client starting";
     int userId = -1;
-    const int pad = initializeController(userId);
+    int pad = initializeController(userId);
     if (pad < 0) notify("Stremio: controller initialization failed");
 
     Scene2D scene(kWidth, kHeight, kPixelDepth);
@@ -1082,6 +1082,8 @@ int main() {
     std::vector<uint32_t> previewPixels;
     uint32_t previewWidth = 0;
     uint32_t previewHeight = 0;
+    uint32_t playbackSourceWidth = 0;
+    uint32_t playbackSourceHeight = 0;
     std::vector<CatalogItem> catalogItems;
     std::vector<PosterImage> catalogPosters;
     std::string catalogType = "movie";
@@ -1386,9 +1388,17 @@ int main() {
                 // immediately accept/close it. Wait for a clean release first.
                 while ((readButtons(pad) & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                     !exitRequested) sceKernelUsleep(8000);
+                // Give Sony's IME exclusive ownership of the controller. On
+                // tested homebrew environments, retaining our open pad handle
+                // made the dialog receive Circle as select and Cross as close.
+                if (pad >= 0) {
+                    scePadClose(pad);
+                    pad = -1;
+                }
                 if (openSystemSearchKeyboard(userId, searchQuery)) {
                     loadSearchResults();
                 }
+                pad = scePadOpen(userId, 0, 0, nullptr);
                 previousButtons = readButtons(pad);
             }
             if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) searchQuery.clear();
@@ -1534,6 +1544,8 @@ int main() {
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
             playbackTimingReported = false;
+            playbackSourceWidth = 0;
+            playbackSourceHeight = 0;
             const int testIndex = activeTab == 4 ? settingsSelection : 3;
             char opening[96];
             snprintf(opening, sizeof(opening),
@@ -1559,6 +1571,8 @@ int main() {
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
             playbackTimingReported = false;
+            playbackSourceWidth = 0;
+            playbackSourceHeight = 0;
             avPlayerProbeFrames = 0;
             notify("Stremio: checking verified remote trailer cache...");
             bool reused = false;
@@ -1618,6 +1632,10 @@ int main() {
                 previewVisible = true;
                 previewBackgroundFrames = kFrameBuffers;
                 playbackWallStart = sceKernelGetProcessTime();
+                // Query once on state transition. Re-locking the decoder's
+                // preview mutex twice every render frame starved its worker.
+                playbackSourceWidth = avPlayer.width();
+                playbackSourceHeight = avPlayer.height();
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
                 char result[128];
                 snprintf(result, sizeof(result),
@@ -1637,7 +1655,7 @@ int main() {
                 previewBackgroundFrames > 0, avPlayer.currentTime(),
                 avPlayer.duration(), avPlayer.paused(),
                 avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames(),
-                avPlayer.width(), avPlayer.height());
+                playbackSourceWidth, playbackSourceHeight);
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }

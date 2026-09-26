@@ -260,8 +260,8 @@ void AvPlayerProbe::decoderLoop() {
             : frameWidth;
         // Full-HD NV12-to-RGB at half size still converts 518k pixels/frame on
         // the CPU and limited the probe to ~15 FPS. Keep hardware decode at
-        // 1920x1080, but sample its debug/presentation surface to 640x360.
-        const uint32_t sampleStep = frameWidth > 1280 ? 3 : 2;
+        // 1920x1080, but sample its debug/presentation surface to 480x270.
+        const uint32_t sampleStep = frameWidth > 1280 ? 4 : 2;
         const uint32_t outputWidth = frameWidth / sampleStep;
         const uint32_t outputHeight = frameHeight / sampleStep;
         converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
