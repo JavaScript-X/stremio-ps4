@@ -7,7 +7,10 @@
 #include <orbis/libkernel.h>
 
 namespace {
-constexpr size_t kTexturePoolSize = 64 * 1024 * 1024;
+// HD streams can request decoder reference surfaces in addition to the six
+// output frames. 64 MiB was sufficient for SD but failed during EnableStream
+// for 720p/1080p on retail hardware.
+constexpr size_t kTexturePoolSize = 192 * 1024 * 1024;
 constexpr size_t kDirectMemoryAlignment = 0x200000;
 
 void* texturePool = nullptr;

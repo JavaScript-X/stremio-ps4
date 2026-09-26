@@ -193,24 +193,7 @@ void drawHardwareProbe(
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
-    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
-    drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
-    for (int index = 0; index < kTopTabCount; ++index) {
-        scene.DrawText(tabX[index], 52, kTopTabs[index],
-            index == activeTab ? text : mutedText, 2);
-    }
-    scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
-        stremioPurple);
-    scene.DrawText(1670, 52, "L1 / R1", mutedText, 2);
-
-    scene.DrawRectangle(120, 170, 690, 48, stremioPurple);
-    scene.DrawText(
-        142, 182,
-        activeTab == 3 ? "SEARCH RESULTS" :
-        (catalogType == "series" ? "TOP SERIES" :
-        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
-        text, 3);
     const int cardX[] = {120, 565, 1010, 1455};
     const int cardY = 260 + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
@@ -276,16 +259,34 @@ void drawHardwareProbe(
     if (catalogMotion >= 0)
         drawCatalogRow(nextPage, previewY, false, false, 90);
 
+    // Paint the navigation after moving rows. This is a hard content viewport:
+    // outgoing cards disappear behind it instead of crossing the top menu.
+    scene.DrawRectangle(0, 0, kWidth, 240, background);
+    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
+    drawBrand(scene, text);
+    for (int index = 0; index < kTopTabCount; ++index) {
+        scene.DrawText(tabX[index], 52, kTopTabs[index],
+            index == activeTab ? text : mutedText, 2);
+    }
+    scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
+        stremioPurple);
+    scene.DrawText(1670, 52, "L1 / R1", mutedText, 2);
+    scene.DrawRectangle(120, 170, 690, 48, stremioPurple);
+    scene.DrawText(142, 182,
+        activeTab == 3 ? "SEARCH RESULTS" :
+        (catalogType == "series" ? "TOP SERIES" :
+        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
+        text, 3);
+    char pageText[64];
+    snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
+        static_cast<int>(items.size()));
+    scene.DrawText(1540, 182, pageText, mutedText, 2);
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
-    char pageText[64];
-    snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
-        static_cast<int>(items.size()));
-    scene.DrawText(1540, 182, pageText, mutedText, 2);
 }
 
 void drawSearch(Scene2D& scene, const std::string& query, int,
@@ -342,7 +343,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.51"};
+        "ABOUT STREMIO PS4  v2.52"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -1127,11 +1128,13 @@ int main() {
         catalogType = job.type;
         catalogItems.clear();
         catalogPosters.clear();
+        bool restoredFromCache = false;
         if (!force && job.loaded) {
             job.items.swap(catalogItems);
             job.posters.swap(catalogPosters);
             job.status.swap(catalogStatus);
             job.loaded = false;
+            restoredFromCache = true;
         } else {
             if (force && !job.running.load(std::memory_order_acquire) &&
                 !job.completed.load(std::memory_order_acquire)) {
@@ -1144,7 +1147,8 @@ int main() {
             startCatalogLoad(tab, force);
         }
         activeCatalogDataTab = tab;
-        displayedPosterCount = 0;
+        displayedPosterCount = restoredFromCache
+            ? static_cast<int>(catalogPosters.size()) : 0;
         focusedCard = 0;
         catalogPage = 0;
         detailVisible = false;
@@ -1235,6 +1239,7 @@ int main() {
                 catalogPosters.swap(job.posters);
                 catalogStatus.swap(job.status);
                 job.loaded = false;
+                displayedPosterCount = static_cast<int>(catalogPosters.size());
             }
         }
         if (activeTab < 3 && catalogItems.empty() &&
