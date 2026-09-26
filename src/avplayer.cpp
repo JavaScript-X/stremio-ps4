@@ -258,18 +258,23 @@ void AvPlayerProbe::decoderLoop() {
         const uint32_t pitch = frame.details.video.pitch > 0
             ? frame.details.video.pitch
             : frameWidth;
-        const uint32_t outputWidth = frameWidth / 2;
-        const uint32_t outputHeight = frameHeight / 2;
+        // Full-HD NV12-to-RGB at half size still converts 518k pixels/frame on
+        // the CPU and limited the probe to ~15 FPS. Keep hardware decode at
+        // 1920x1080, but sample its debug/presentation surface to 640x360.
+        const uint32_t sampleStep = frameWidth > 1280 ? 3 : 2;
+        const uint32_t outputWidth = frameWidth / sampleStep;
+        const uint32_t outputHeight = frameHeight / sampleStep;
         converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
 
         const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
         const uint8_t* chroma = luma + static_cast<size_t>(pitch) * frameHeight;
         for (uint32_t py = 0; py < outputHeight; ++py) {
-            const uint32_t y = py * 2;
+            const uint32_t y = py * sampleStep;
             for (uint32_t px = 0; px < outputWidth; ++px) {
-                const uint32_t x = px * 2;
+                const uint32_t x = px * sampleStep;
                 const int yy = luma[static_cast<size_t>(y) * pitch + x] - 16;
-                const size_t uv = static_cast<size_t>(y / 2) * pitch + x;
+                const uint32_t chromaX = x & ~1u;
+                const size_t uv = static_cast<size_t>(y / 2) * pitch + chromaX;
                 const int u = chroma[uv] - 128;
                 const int v = chroma[uv + 1] - 128;
                 const int r = (298 * yy + 409 * v + 128) >> 8;

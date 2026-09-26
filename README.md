@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.52 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.60 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -79,6 +79,11 @@ Version 2.52 expands AVPlayer's direct-memory texture arena for HD reference
 surfaces and uses Constrained Baseline, single-reference, no-B-frame 720p and
 1080p probes. It also fixes progressive-poster ownership when revisiting a
 cached tab and masks outgoing catalog rows below the navigation viewport.
+Version 2.60 keeps full-HD hardware decoding while reducing only its CPU debug
+preview to 640x360, moves pagination and poster work to a background prefetch,
+and adds lightweight tab lift and footer-shimmer animation. Search reports the
+console's native Enter-button assignment because Sony's system IME follows
+that setting for Cross/Circle behavior.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

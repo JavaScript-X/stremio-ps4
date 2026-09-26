@@ -265,7 +265,13 @@ void drawHardwareProbe(
     scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
     drawBrand(scene, text);
     for (int index = 0; index < kTopTabCount; ++index) {
-        scene.DrawText(tabX[index], 52, kTopTabs[index],
+        const int travel = index == activeTab
+            ? std::abs(tabX[activeTab] - indicatorX) : 0;
+        const int lift = std::min(8, travel / 18);
+        if (index == activeTab)
+            scene.DrawRectangle(tabX[index] - 12, 38 - lift,
+                activeTab == 2 ? 280 : 195, 48, cardMuted);
+        scene.DrawText(tabX[index], 52 - lift, kTopTabs[index],
             index == activeTab ? text : mutedText, 2);
     }
     scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
@@ -283,13 +289,15 @@ void drawHardwareProbe(
     scene.DrawText(1540, 182, pageText, mutedText, 2);
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
+    const int shimmerX = (animationFrame * 7) % (kWidth + 180) - 180;
+    scene.DrawRectangle(shimmerX, 998, 180, 3, stremioPurple);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
 }
 
-void drawSearch(Scene2D& scene, const std::string& query, int,
+void drawSearch(Scene2D& scene, const std::string& query, int enterAssignment,
     int indicatorX, int) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
@@ -311,6 +319,12 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawText(270, 335, shown.c_str(), query.empty() ? muted : text, 3);
     scene.DrawText(270, 455,
         "PRESS CROSS TO TYPE WITH THE PS4 KEYBOARD", muted, 2);
+    scene.DrawText(270, 500,
+        enterAssignment == ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS
+            ? "SYSTEM ENTER BUTTON: CROSS"
+            : "SYSTEM ENTER BUTTON: CIRCLE - CHANGE IN PS4 SYSTEM SETTINGS",
+        enterAssignment == ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS
+            ? text : purple, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
@@ -343,7 +357,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.52"};
+        "ABOUT STREMIO PS4  v2.60"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -455,7 +469,9 @@ void drawDecodedPreview(
     uint64_t duration,
     bool paused,
     uint32_t decoderFpsTimesTen,
-    uint64_t decodedFrames) {
+    uint64_t decodedFrames,
+    uint32_t sourceWidth,
+    uint32_t sourceHeight) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
     const Color track = {45, 45, 58};
@@ -493,7 +509,7 @@ void drawDecodedPreview(
     char debug[128];
     snprintf(debug, sizeof(debug),
         "SOURCE %ux%u   FRAMES %llu   SEEK STEP 5s   HW AVPLAYER",
-        previewWidth * 2, previewHeight * 2,
+        sourceWidth, sourceHeight,
         static_cast<unsigned long long>(decodedFrames));
     scene.DrawText(480, 945, debug, text, 2);
     scene.DrawRectangle(0, 1000, kWidth, 80, background);
@@ -969,6 +985,28 @@ struct CatalogLoadJob {
     std::vector<PosterImage> posters;
 };
 
+struct CatalogPageJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    std::string type;
+    int skip = 0;
+    int result = 0;
+    std::vector<CatalogItem> items;
+    std::vector<PosterImage> posters;
+};
+
+void* catalogPageEntry(void* argument) {
+    CatalogPageJob* job = static_cast<CatalogPageJob*>(argument);
+    job->items.clear();
+    job->posters.clear();
+    job->result = fetchCatalogPage(job->type, job->skip, "", job->items);
+    if (job->result > 0) fetchPosters(job->items, job->posters);
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
+
 void* catalogLoadEntry(void* argument) {
     CatalogLoadJob* job = static_cast<CatalogLoadJob*>(argument);
     job->items.clear();
@@ -1056,7 +1094,9 @@ int main() {
     int indicatorX = 350;
     int animationFrame = 0;
     int catalogMotion = 0;
-    int searchKey = 0;
+    int searchKey = ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS;
+    sceSystemServiceParamGetInt(
+        ORBIS_SYSTEM_SERVICE_PARAM_ID_ENTER_BUTTON_ASSIGN, &searchKey);
     int settingsSelection = 0;
     bool searchShowingResults = false;
     std::string searchQuery;
@@ -1072,11 +1112,34 @@ int main() {
         "/app0/assets/stremio-official.png", 96, 96, headerLogo);
 
     CatalogLoadJob catalogJobs[3];
+    CatalogPageJob pageJob;
     catalogJobs[0].type = "movie";
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
     int activeCatalogDataTab = -1;
     int displayedPosterCount = 0;
+
+    auto catalogWorkersBusy = [&]() {
+        for (int index = 0; index < 3; ++index) {
+            if (catalogJobs[index].running.load(std::memory_order_acquire))
+                return true;
+        }
+        return false;
+    };
+
+    auto startPagePrefetch = [&]() {
+        if (activeTab >= 3 || pageJob.running.load(std::memory_order_acquire) ||
+            pageJob.completed.load(std::memory_order_acquire) ||
+            catalogWorkersBusy() || catalogItems.empty()) return;
+        pageJob.type = catalogType;
+        pageJob.skip = static_cast<int>(catalogItems.size());
+        pageJob.completed.store(false, std::memory_order_release);
+        pageJob.running.store(true, std::memory_order_release);
+        if (pthread_create(&pageJob.thread, nullptr,
+                catalogPageEntry, &pageJob) != 0) {
+            pageJob.running.store(false, std::memory_order_release);
+        }
+    };
 
     auto storeActiveCatalog = [&]() {
         if (activeCatalogDataTab < 0 || activeCatalogDataTab >= 3) return;
@@ -1102,6 +1165,7 @@ int main() {
         if (tab < 0 || tab >= 3) return false;
         CatalogLoadJob& job = catalogJobs[tab];
         if (job.running.load(std::memory_order_acquire)) return true;
+        if (pageJob.running.load(std::memory_order_acquire)) return false;
         if (!force && job.loaded) return true;
         // Keep the shared PS4 HTTP contexts single-threaded. A rapidly selected
         // tab remains responsive with placeholders and starts next.
@@ -1211,6 +1275,23 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (pageJob.completed.exchange(false, std::memory_order_acq_rel)) {
+            pthread_join(pageJob.thread, nullptr);
+            if (pageJob.result > 0 && pageJob.type == catalogType &&
+                pageJob.skip == static_cast<int>(catalogItems.size())) {
+                catalogItems.insert(catalogItems.end(),
+                    pageJob.items.begin(), pageJob.items.end());
+                catalogPosters.insert(catalogPosters.end(),
+                    pageJob.posters.begin(), pageJob.posters.end());
+                char status[96];
+                snprintf(status, sizeof(status),
+                    "%d ITEMS LOADED   BACKGROUND PREFETCH",
+                    static_cast<int>(catalogItems.size()));
+                catalogStatus = status;
+            }
+            pageJob.items.clear();
+            pageJob.posters.clear();
+        }
         if (activeTab < 3 && activeCatalogDataTab == activeTab) {
             CatalogLoadJob& activeJob = catalogJobs[activeTab];
             if (activeJob.itemsReady.load(std::memory_order_acquire) &&
@@ -1307,15 +1388,8 @@ int main() {
                 if ((nextPage + 1) * 4 >=
                         static_cast<int>(catalogItems.size()) &&
                     activeTab < 3) {
-                    catalogStatus = "LOADING MORE ITEMS...";
-                    const int added = appendCatalogPage(
-                        catalogType, catalogItems, catalogPosters);
-                    char status[128];
-                    snprintf(status, sizeof(status),
-                        added > 0 ? "%d ITEMS LOADED   CONTINUOUS SCROLL" :
-                            "END REACHED   %d ITEMS LOADED",
-                        static_cast<int>(catalogItems.size()));
-                    catalogStatus = status;
+                    catalogStatus = "LOADING MORE IN BACKGROUND...";
+                    startPagePrefetch();
                 }
                 if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
                     catalogPage = nextPage;
@@ -1543,7 +1617,8 @@ int main() {
                 scene, previewPixels, previewWidth, previewHeight,
                 previewBackgroundFrames > 0, avPlayer.currentTime(),
                 avPlayer.duration(), avPlayer.paused(),
-                avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames());
+                avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames(),
+                avPlayer.width(), avPlayer.height());
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }
@@ -1591,6 +1666,9 @@ int main() {
             catalogMotion = catalogMotion * 3 / 4;
             if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
         }
+        if (activeTab < 3 && !catalogItems.empty() &&
+            static_cast<int>(catalogItems.size()) - (catalogPage + 2) * 4 <= 4)
+            startPagePrefetch();
 
     }
 
@@ -1603,6 +1681,10 @@ int main() {
         if (wasRunning || job.completed.load(std::memory_order_acquire))
             pthread_join(job.thread, nullptr);
     }
+    const bool pageWasRunning = pageJob.running.load(std::memory_order_acquire);
+    if (pageWasRunning) pthread_cancel(pageJob.thread);
+    if (pageWasRunning || pageJob.completed.load(std::memory_order_acquire))
+        pthread_join(pageJob.thread, nullptr);
     if (imeDialogInitialized &&
         sceImeDialogGetStatus() == ORBIS_DIALOG_STATUS_RUNNING) {
         sceImeDialogAbort();
