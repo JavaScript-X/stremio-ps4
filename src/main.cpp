@@ -233,10 +233,10 @@ void drawHardwareProbe(
         if (posterReady && scalePercent == 100) {
             scene.BlitRgbMasked(x, rowY, posters[itemIndex].width,
                 posters[itemIndex].height, posters[itemIndex].pixels.data());
-        } else if (posterReady) {
-            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 16,
-                posters[itemIndex].pixels.data(), posters[itemIndex].width,
-                posters[itemIndex].height);
+        } else if (posterReady && posters[itemIndex].previewValid()) {
+            scene.BlitRgbMasked(x, rowY, posters[itemIndex].previewWidth,
+                posters[itemIndex].previewHeight,
+                posters[itemIndex].previewPixels.data());
         } else {
             scene.DrawRoundedRectangle(x, rowY, cardWidth, cardHeight, 18,
                 stremioPurple);
@@ -264,8 +264,9 @@ void drawHardwareProbe(
         drawCatalogRow(page - 1, cardY - 560, false, true, 100);
     else if (catalogMotion < 0)
         drawCatalogRow(page + 1, cardY + 560, false, true, 100);
-    const int selectedScale = catalogMotion > 0
-        ? 90 + (560 - catalogMotion) * 10 / 560 : 100;
+    // Use the precomputed 90% texture for most of the rise and switch to the
+    // full poster near its destination. Avoid resampling four JPEGs per frame.
+    const int selectedScale = catalogMotion > 48 ? 90 : 100;
     drawCatalogRow(page, cardY, true, true, selectedScale);
 
     const int nextPage = page + 1;
@@ -341,7 +342,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.50"};
+        "ABOUT STREMIO PS4  v2.51"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -930,7 +931,7 @@ int fetchPosters(
             decodePosterJpeg(
                 encoded, kPosterWidth, kPosterHeight, posters[index])) {
             if (!cached) writeCachedFile(stored, encoded);
-            preparePosterPresentation(posters[index], 18, 220, 290);
+            preparePosterPresentation(posters[index], 18, 279, 369);
             ++loaded;
         }
     }

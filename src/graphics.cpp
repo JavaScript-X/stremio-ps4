@@ -177,23 +177,23 @@ void Scene2D::DrawVerticalFade(
     const int top = std::max(0, y);
     const int bottom = std::min(height_, y + height);
     if (left >= right || top >= bottom) return;
-    uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
-    for (int row = top; row < bottom; ++row) {
-        const int localY = row - y;
+    // Twelve pre-blended bands preserve the feathered appearance without
+    // doing several integer multiplies for ~630,000 pixels every frame.
+    constexpr int kBands = 12;
+    constexpr Color base = {18, 18, 24};
+    for (int band = 0; band < kBands; ++band) {
+        const int bandTop = y + height * band / kBands;
+        const int bandBottom = y + height * (band + 1) / kBands;
         const uint32_t opacity = topOpacity +
-            (static_cast<int>(bottomOpacity) - topOpacity) * localY /
-                std::max(1, height - 1);
+            (static_cast<int>(bottomOpacity) - topOpacity) * band /
+                (kBands - 1);
         const uint32_t inverse = 255 - opacity;
-        for (int column = left; column < right; ++column) {
-            uint32_t& destination = buffer[static_cast<size_t>(row) * width_ + column];
-            const uint32_t r = (color.r * opacity +
-                ((destination >> 16) & 255) * inverse) / 255;
-            const uint32_t g = (color.g * opacity +
-                ((destination >> 8) & 255) * inverse) / 255;
-            const uint32_t b = (color.b * opacity +
-                (destination & 255) * inverse) / 255;
-            destination = 0x80000000u | (r << 16) | (g << 8) | b;
-        }
+        const Color blended = {
+            static_cast<uint8_t>((color.r * opacity + base.r * inverse) / 255),
+            static_cast<uint8_t>((color.g * opacity + base.g * inverse) / 255),
+            static_cast<uint8_t>((color.b * opacity + base.b * inverse) / 255)};
+        DrawRectangle(left, std::max(top, bandTop), right - left,
+            std::min(bottom, bandBottom) - std::max(top, bandTop), blended);
     }
 }
 

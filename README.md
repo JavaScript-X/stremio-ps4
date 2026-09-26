@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.50 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.51 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -71,6 +71,10 @@ back/forward seeking and restart, and displays source resolution plus decoded
 frame count. Catalog, metadata, and encoded poster responses persist in
 `/data`; uncached posters are published individually instead of holding the
 whole catalog until every image finishes.
+The 2.51 hotfix discovers generated video-only MP4 streams by valid dimensions
+rather than relying on one stream-type value. Feathered navigation panels use
+pre-blended bands and lower-row posters use cached 90% textures, removing the
+per-pixel blending and scaling that reduced shell performance in 2.50.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

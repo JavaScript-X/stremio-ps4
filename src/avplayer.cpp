@@ -171,7 +171,6 @@ void AvPlayerProbe::update() {
         return;
     }
     constexpr int32_t kReadyEvent = 0x02;
-    constexpr uint32_t kVideoStream = 0;
     if (!started_) {
         if (latestPlayerEvent != kReadyEvent) {
             return;
@@ -179,20 +178,30 @@ void AvPlayerProbe::update() {
 
         bool videoEnabled = false;
         const int32_t streamCount = sceAvPlayerStreamCount(handle_);
+        int32_t lastInfoResult = 0;
+        int32_t lastEnableResult = 0;
         for (int32_t index = 0; index < streamCount; ++index) {
             SceAvPlayerStreamInfo info = {};
-            if (sceAvPlayerGetStreamInfo(handle_, index, &info) >= 0 &&
-                info.type == kVideoStream &&
-                sceAvPlayerEnableStream(handle_, index) >= 0) {
+            lastInfoResult = sceAvPlayerGetStreamInfo(handle_, index, &info);
+            if (lastInfoResult >= 0 && info.details.video.width > 0 &&
+                info.details.video.height > 0) {
+                lastEnableResult = sceAvPlayerEnableStream(handle_, index);
+            }
+            if (lastInfoResult >= 0 && info.details.video.width > 0 &&
+                info.details.video.height > 0 && lastEnableResult >= 0) {
                 width_ = info.details.video.width;
                 height_ = info.details.video.height;
                 duration_ = info.duration;
                 videoEnabled = true;
+                break;
             }
         }
         if (!videoEnabled) {
             errorStage_ = 5;
-            errorCode_ = streamCount;
+            // Preserve the actual failing API code when available. A positive
+            // value still reports the discovered stream count.
+            errorCode_ = lastInfoResult < 0 ? lastInfoResult :
+                (lastEnableResult < 0 ? lastEnableResult : streamCount);
             state_ = State::Failed;
             return;
         }
