@@ -32,16 +32,19 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.80 adds a controller-driven Stremio catalog browser: bounded HTTPS
-downloads of Cinemeta catalogs, dependency-free parsing of eight
+Version 1.90 adds a controller-driven Stremio catalog browser: bounded HTTPS
+downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
 remain compatible with the small decoder used by the native client.
 Movie titles and navigation labels are rasterized directly into the native
 framebuffer, so the catalog no longer depends on notifications for identity.
-The browser automatically loads eight items, switches between Movies and
-Series, pages between two groups of four, and opens a native detail screen with
-release information, runtime, and a wrapped description.
+An animated top bar exposes Movies, Series, Public Domain, Search, and Settings
+through R1/R2. Catalogs begin with eight items and automatically append another
+page as Down reaches the loaded boundary, providing continuous scrolling. A
+native 36-key controller keyboard searches the canonical Cinemeta endpoint and
+opens matching movie details. Settings contains local and cached-HTTPS playback
+diagnostics plus query reset and build information.
 Detail screens also show IMDb rating and genres. Series metadata exposes up to
 256 episodes with Left/Right episode navigation and Cross selection.
 The official Public Domain Movies addon is available as a third catalog. Its
@@ -63,13 +66,12 @@ on the console CPU. The build check prints the active release optimization so
 an accidental unoptimized package is visible in CI and local build logs.
 It does not log in, load user addons, or present decoded audio yet.
 
-M1 controller test controls:
+Controller controls:
 
 - **Left/Right** moves the highlighted poster card.
 - The default Movies catalog loads automatically at startup.
-- **L1/R1** switches between the Movies and Series catalogs.
-- **L2** opens the official Public Domain Movies addon catalog.
-- **Up/Down** switches between two pages of four items.
+- **R1/R2** moves forward/backward through the five animated top tabs.
+- **Up/Down** continuously scrolls catalog pages and fetches more at the end.
 - **Triangle** explicitly reloads the active catalog and its posters.
 - **Cross** opens the focused item's metadata detail screen.
 - On Series details, **Left/Right** browses episodes and **Cross** selects the
@@ -77,8 +79,9 @@ M1 controller test controls:
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
-- **R2** downloads (or reuses) the legal remote Sintel trailer through verified
-  HTTPS, then plays it from the persistent local cache.
+- The Search tab uses the D-pad and **Cross** to type, **Square** to erase,
+  **Triangle** to submit, and **Circle** to clear or return from results.
+- The Settings tab contains the packaged and cached-HTTPS playback tests.
 - On a Public Domain detail page, **Cross** resolves addon streams. The stream
   screen uses **Up/Down**, **Cross**, and **Circle**.
 - **Circle** cancels an active AVPlayer probe.

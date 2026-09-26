@@ -52,6 +52,10 @@ constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
+constexpr int kCatalogBatchSize = 8;
+constexpr int kTopTabCount = 5;
+const char* const kTopTabs[kTopTabCount] = {
+    "MOVIES", "SERIES", "PUBLIC DOMAIN", "SEARCH", "SETTINGS"};
 
 int networkPoolId = 0;
 int sslContextId = 0;
@@ -95,9 +99,12 @@ void drawHardwareProbe(
     const std::string& catalogType,
     const std::string& status,
     const std::vector<CatalogItem>& items,
-    const std::vector<PosterImage>& posters) {
+    const std::vector<PosterImage>& posters,
+    int activeTab,
+    int indicatorX,
+    int animationFrame) {
     const Color background = {18, 18, 24};
-    const Color sidebar = {29, 29, 39};
+    const Color header = {29, 29, 39};
     const Color stremioPurple = {123, 91, 214};
     const Color card = {45, 45, 58};
     const Color cardMuted = {35, 35, 46};
@@ -106,51 +113,131 @@ void drawHardwareProbe(
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(0, 0, 310, kHeight, sidebar);
-    scene.DrawRectangle(48, 54, 214, 54, stremioPurple);
-    scene.DrawRectangle(48, 170, 214, 18, card);
-    scene.DrawRectangle(48, 224, 170, 18, cardMuted);
-    scene.DrawRectangle(48, 278, 194, 18, cardMuted);
-    scene.DrawText(68, 70, "STREMIO", text, 3);
-    scene.DrawText(68, 168, "HOME", mutedText, 2);
-    scene.DrawText(68, 222, "DISCOVER", mutedText, 2);
-    scene.DrawText(68, 276, "LIBRARY", mutedText, 2);
+    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawText(60, 45, "STREMIO", text, 3);
+    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
+    for (int index = 0; index < kTopTabCount; ++index) {
+        scene.DrawText(tabX[index], 52, kTopTabs[index],
+            index == activeTab ? text : mutedText, 2);
+    }
+    scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
+        stremioPurple);
+    scene.DrawText(1690, 52, "R1/R2", mutedText, 2);
 
-    scene.DrawRectangle(370, 76, 690, 48, stremioPurple);
+    scene.DrawRectangle(120, 170, 690, 48, stremioPurple);
     scene.DrawText(
-        392, 88,
-        catalogType == "series" ? "TOP SERIES" :
-        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES"),
+        142, 182,
+        activeTab == 3 ? "SEARCH RESULTS" :
+        (catalogType == "series" ? "TOP SERIES" :
+        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
         text, 3);
-    const int cardX[] = {370, 718, 1066, 1414};
+    const int cardX[] = {120, 565, 1010, 1455};
     for (int index = 0; index < 4; ++index) {
         const int itemIndex = page * 4 + index;
         if (index == focusedCard) {
-            scene.DrawRectangle(cardX[index] - 8, 172, 326, 426, focus);
+            const int pulse = (animationFrame / 8) % 2;
+            scene.DrawRectangle(cardX[index] - 8 - pulse, 252 - pulse,
+                326 + pulse * 2, 426 + pulse * 2, focus);
         }
-        scene.DrawRectangle(cardX[index], 180, 310, 410, card);
+        scene.DrawRectangle(cardX[index], 260, 310, 410,
+            itemIndex < static_cast<int>(items.size()) ? card : cardMuted);
         if (itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid()) {
             scene.BlitRgb(
-                cardX[index], 180, posters[itemIndex].width,
+                cardX[index], 260, posters[itemIndex].width,
                 posters[itemIndex].height, posters[itemIndex].pixels.data());
         }
         if (itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
-            scene.DrawText(cardX[index], 610, title.c_str(), text, 2);
+            scene.DrawText(cardX[index], 690, title.c_str(), text, 2);
         }
     }
 
-    scene.DrawText(370, 690, status.c_str(), mutedText, 2);
+    scene.DrawText(120, 780, status.c_str(), mutedText, 2);
     scene.DrawText(
-        370, 760,
-        "L1 MOVIES   R1 SERIES   L2 PUBLIC DOMAIN   UP/DOWN PAGE",
+        120, 850,
+        "R1/R2 TABS   LEFT/RIGHT SELECT   UP/DOWN CONTINUOUS SCROLL",
         mutedText, 2);
     scene.DrawText(
-        370, 815, "CROSS DETAILS   SQUARE LOCAL VIDEO   R2 REMOTE VIDEO",
+        120, 905, "CROSS DETAILS   SQUARE LOCAL VIDEO",
         mutedText, 2);
-    scene.DrawText(page == 0 ? 1630 : 1660, 88,
-        page == 0 ? "PAGE 1/2" : "PAGE 2/2", mutedText, 2);
+    char pageText[64];
+    snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
+        static_cast<int>(items.size()));
+    scene.DrawText(1540, 182, pageText, mutedText, 2);
+}
+
+void drawSearch(Scene2D& scene, const std::string& query, int keyIndex,
+    int indicatorX, int animationFrame) {
+    const Color background = {18, 18, 24};
+    const Color header = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawText(60, 45, "STREMIO", text, 3);
+    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
+    for (int index = 0; index < kTopTabCount; ++index) {
+        scene.DrawText(tabX[index], 52, kTopTabs[index],
+            index == 3 ? text : muted, 2);
+    }
+    scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
+    scene.DrawText(120, 185, "SEARCH CINEMETA", text, 3);
+    scene.DrawRectangle(120, 250, 1680, 75, header);
+    const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
+    scene.DrawText(155, 273, shown.c_str(), query.empty() ? muted : text, 3);
+    const char* keys = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    for (int index = 0; index < 36; ++index) {
+        const int column = index % 9;
+        const int row = index / 9;
+        const int x = 260 + column * 155;
+        const int y = 400 + row * 120;
+        if (index == keyIndex) {
+            const int pulse = (animationFrame / 8) % 2;
+            scene.DrawRectangle(x - 8 - pulse, y - 8 - pulse,
+                86 + pulse * 2, 86 + pulse * 2, focus);
+        }
+        scene.DrawRectangle(x, y, 70, 70, header);
+        char label[2] = {keys[index], 0};
+        scene.DrawText(x + 22, y + 20, label, text, 2);
+    }
+    scene.DrawText(260, 930,
+        "CROSS TYPE   SQUARE BACKSPACE   TRIANGLE SEARCH   CIRCLE CLEAR",
+        muted, 2);
+}
+
+void drawSettings(Scene2D& scene, int selected, int indicatorX) {
+    const Color background = {18, 18, 24};
+    const Color header = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawText(60, 45, "STREMIO", text, 3);
+    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
+    for (int index = 0; index < kTopTabCount; ++index) {
+        scene.DrawText(tabX[index], 52, kTopTabs[index],
+            index == 4 ? text : muted, 2);
+    }
+    scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
+    scene.DrawText(120, 190, "SETTINGS & DIAGNOSTICS", text, 3);
+    const char* rows[] = {
+        "LOCAL H.264 PLAYBACK TEST",
+        "CACHED HTTPS PLAYBACK TEST",
+        "CLEAR SEARCH QUERY",
+        "ABOUT STREMIO PS4  v1.90"};
+    for (int index = 0; index < 4; ++index) {
+        const int y = 300 + index * 125;
+        if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
+        scene.DrawRectangle(120, y, 1680, 70, header);
+        scene.DrawText(155, y + 22, rows[index], text, 2);
+    }
+    scene.DrawText(120, 900,
+        "UP/DOWN SELECT   CROSS RUN   R1/R2 CHANGE TAB", muted, 2);
 }
 
 void drawDetails(
@@ -205,7 +292,7 @@ void drawDetails(
         130, 945,
         catalogType == "series"
             ? "LEFT/RIGHT EPISODE   CROSS SELECT   CIRCLE BACK"
-            : "CIRCLE BACK   L1/R1 CATALOGS",
+            : "CIRCLE BACK   R1/R2 TOP TABS",
         muted, 2);
 }
 
@@ -435,20 +522,50 @@ int cacheLegalRemoteTrailer(bool& reused) {
     return bytes;
 }
 
-int fetchCatalog(
+std::string urlEncode(const std::string& value) {
+    std::string encoded;
+    const char* hex = "0123456789ABCDEF";
+    for (unsigned char character : value) {
+        if (std::isalnum(character) || character == '-' || character == '_' ||
+            character == '.' || character == '~') {
+            encoded.push_back(static_cast<char>(character));
+        } else {
+            encoded.push_back('%');
+            encoded.push_back(hex[character >> 4]);
+            encoded.push_back(hex[character & 15]);
+        }
+    }
+    return encoded;
+}
+
+int fetchCatalogPage(
     const std::string& catalogType,
+    int skip,
+    const std::string& searchQuery,
     std::vector<CatalogItem>& items) {
     if (catalogType != "movie" && catalogType != "series" &&
         catalogType != "publicdomain") return -10;
-    const std::string url = catalogType == "publicdomain"
-        ? std::string(kPublicDomainBaseUrl) +
-            "catalog/movie/publicdomainmovies.json"
-        : std::string(kCatalogBaseUrl) + catalogType + "/top.json";
+    std::string url;
+    if (!searchQuery.empty()) {
+        url = std::string("https://v3-cinemeta.strem.io/catalog/") +
+            catalogType + "/top/search=" + urlEncode(searchQuery) + ".json";
+    } else if (catalogType == "publicdomain") {
+        url = std::string(kPublicDomainBaseUrl) +
+            "catalog/movie/publicdomainmovies";
+    } else {
+        url = std::string(kCatalogBaseUrl) + catalogType + "/top";
+    }
+    if (searchQuery.empty() && skip > 0) {
+        char pagination[48];
+        snprintf(pagination, sizeof(pagination), "/skip=%d", skip);
+        url += pagination;
+    }
+    if (searchQuery.empty()) url += ".json";
     std::string body;
     const int bytes =
         downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
     if (bytes < 0) return bytes;
-    return parseCatalogItems(body, items, 8)
+    return parseCatalogItems(body, items, kCatalogBatchSize)
         ? static_cast<int>(items.size()) : -8;
 }
 
@@ -513,12 +630,27 @@ int fetchPosters(
     }
     return loaded;
 }
+
+int appendCatalogPage(
+    const std::string& catalogType,
+    std::vector<CatalogItem>& items,
+    std::vector<PosterImage>& posters) {
+    std::vector<CatalogItem> nextItems;
+    const int result = fetchCatalogPage(
+        catalogType, static_cast<int>(items.size()), "", nextItems);
+    if (result <= 0) return result;
+    std::vector<PosterImage> nextPosters;
+    fetchPosters(nextItems, nextPosters);
+    items.insert(items.end(), nextItems.begin(), nextItems.end());
+    posters.insert(posters.end(), nextPosters.begin(), nextPosters.end());
+    return result;
+}
 }  // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.80: optimized 24 FPS video pipeline");
+    notify("Stremio 1.90: animated tabs, search and infinite scroll");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -559,6 +691,13 @@ int main() {
     std::string catalogType = "movie";
     std::string catalogStatus = "LOADING CINEMETA...";
     int catalogPage = 0;
+    int activeTab = 0;
+    int indicatorX = 350;
+    int animationFrame = 0;
+    int searchKey = 0;
+    int settingsSelection = 0;
+    bool searchShowingResults = false;
+    std::string searchQuery;
     bool detailVisible = false;
     bool streamVisible = false;
     int detailPosterIndex = -1;
@@ -575,7 +714,8 @@ int main() {
         notify(loading);
         catalogStatus = "LOADING CINEMETA...";
         catalogPosters.clear();
-        const int catalogResult = fetchCatalog(catalogType, catalogItems);
+        const int catalogResult = fetchCatalogPage(
+            catalogType, 0, "", catalogItems);
         char result[192];
         if (catalogResult > 0) {
             const int posterCount = fetchPosters(catalogItems, catalogPosters);
@@ -601,12 +741,58 @@ int main() {
         notify(result);
     };
 
+    auto loadSearchResults = [&]() {
+        if (searchQuery.empty()) {
+            notify("Stremio: enter a search title first");
+            return;
+        }
+        notify("Stremio: searching Cinemeta movies...");
+        catalogItems.clear();
+        catalogPosters.clear();
+        const int result = fetchCatalogPage(
+            "movie", 0, searchQuery, catalogItems);
+        if (result > 0) {
+            const int posterCount = fetchPosters(catalogItems, catalogPosters);
+            char status[128];
+            snprintf(status, sizeof(status),
+                "SEARCH: %s   %d RESULTS   %d POSTERS",
+                searchQuery.c_str(), result, posterCount);
+            catalogStatus = status;
+            catalogPage = 0;
+            focusedCard = 0;
+            catalogType = "movie";
+            searchShowingResults = true;
+            notify("Stremio: search results ready");
+        } else {
+            catalogStatus = "NO SEARCH RESULTS - CIRCLE TO EDIT";
+            searchShowingResults = true;
+            notify("Stremio: no search results");
+        }
+    };
+
+    auto selectTab = [&](int tab) {
+        activeTab = (tab + kTopTabCount) % kTopTabCount;
+        detailVisible = false;
+        streamVisible = false;
+        if (activeTab == 0) {
+            catalogType = "movie";
+            loadActiveCatalog();
+        } else if (activeTab == 1) {
+            catalogType = "series";
+            loadActiveCatalog();
+        } else if (activeTab == 2) {
+            catalogType = "publicdomain";
+            loadActiveCatalog();
+        }
+    };
+
     // Present both framebuffers before the synchronous first load so the user
     // sees a responsive loading shell instead of a black screen.
     for (int initialFrame = 0; initialFrame < kFrameBuffers; ++initialFrame) {
         drawHardwareProbe(
             scene, focusedCard, catalogPage, catalogType, catalogStatus,
-            catalogItems, catalogPosters);
+            catalogItems, catalogPosters, activeTab, indicatorX,
+            animationFrame);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
@@ -632,26 +818,93 @@ int main() {
             }
         }
 
-        if (!previewVisible && !detailVisible && !streamVisible &&
-            (pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0) {
-            --focusedCard;
+        const bool shellVisible =
+            !previewVisible && !detailVisible && !streamVisible;
+        const bool catalogScreen = activeTab < 3 ||
+            (activeTab == 3 && searchShowingResults);
+        if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
+            selectTab(activeTab + 1);
+        } else if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R2) != 0) {
+            selectTab(activeTab - 1);
         }
-        if (!previewVisible && !detailVisible && !streamVisible &&
-            (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
-            catalogPage * 4 + focusedCard + 1 <
-                static_cast<int>(catalogItems.size())) {
-            ++focusedCard;
+
+        const int tabTargets[kTopTabCount] = {350, 570, 790, 1130, 1380};
+        const int indicatorDelta = tabTargets[activeTab] - indicatorX;
+        if (indicatorDelta != 0) {
+            if (indicatorDelta >= -4 && indicatorDelta <= 4) {
+                indicatorX = tabTargets[activeTab];
+            } else {
+                indicatorX += indicatorDelta / 4;
+            }
         }
-        if (!previewVisible && !detailVisible && !streamVisible &&
-            (pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
-            catalogItems.size() > 4) {
-            catalogPage = 1;
-            if (catalogPage * 4 + focusedCard >=
-                static_cast<int>(catalogItems.size())) focusedCard = 0;
-        }
-        if (!previewVisible && !detailVisible && !streamVisible &&
-            (pressed & ORBIS_PAD_BUTTON_UP) != 0) {
-            catalogPage = 0;
+
+        if (shellVisible && activeTab == 3 && !searchShowingResults) {
+            if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && searchKey % 9 > 0)
+                --searchKey;
+            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && searchKey % 9 < 8)
+                ++searchKey;
+            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && searchKey >= 9)
+                searchKey -= 9;
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && searchKey < 27)
+                searchKey += 9;
+            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                searchQuery.size() < 32) {
+                const char* keys = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                searchQuery.push_back(keys[searchKey]);
+            }
+            if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 &&
+                !searchQuery.empty()) searchQuery.pop_back();
+            if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) searchQuery.clear();
+            if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
+                loadSearchResults();
+        } else if (shellVisible && catalogScreen) {
+            if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
+                --focusedCard;
+            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
+                catalogPage * 4 + focusedCard + 1 <
+                    static_cast<int>(catalogItems.size())) ++focusedCard;
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
+                const int nextPage = catalogPage + 1;
+                if (nextPage * 4 >= static_cast<int>(catalogItems.size()) &&
+                    activeTab < 3) {
+                    catalogStatus = "LOADING MORE ITEMS...";
+                    const int added = appendCatalogPage(
+                        catalogType, catalogItems, catalogPosters);
+                    char status[128];
+                    snprintf(status, sizeof(status),
+                        added > 0 ? "%d ITEMS LOADED   CONTINUOUS SCROLL" :
+                            "END REACHED   %d ITEMS LOADED",
+                        static_cast<int>(catalogItems.size()));
+                    catalogStatus = status;
+                }
+                if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
+                    catalogPage = nextPage;
+                    if (catalogPage * 4 + focusedCard >=
+                        static_cast<int>(catalogItems.size())) focusedCard = 0;
+                }
+            }
+            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0)
+                --catalogPage;
+            if (activeTab == 3 &&
+                (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
+                searchShowingResults = false;
+                catalogItems.clear();
+                catalogPosters.clear();
+            }
+        } else if (shellVisible && activeTab == 4) {
+            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
+                --settingsSelection;
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 3)
+                ++settingsSelection;
+            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                settingsSelection == 2) {
+                searchQuery.clear();
+                searchShowingResults = false;
+                notify("Stremio: search query cleared");
+            } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                settingsSelection == 3) {
+                notify("Stremio PS4 v1.90 - JavaScript-X community build");
+            }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
             (pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && detailEpisodeIndex > 0) {
@@ -671,29 +924,13 @@ int main() {
             focusedStream + 1 < static_cast<int>(streams.size())) {
             ++focusedStream;
         }
-        if (!previewVisible &&
-            (pressed & ORBIS_PAD_BUTTON_L1) != 0 && catalogType != "movie") {
-            catalogType = "movie";
-            loadActiveCatalog();
-        }
-        if (!previewVisible &&
-            (pressed & ORBIS_PAD_BUTTON_R1) != 0 && catalogType != "series") {
-            catalogType = "series";
-            loadActiveCatalog();
-        }
-        if (!previewVisible &&
-            (pressed & ORBIS_PAD_BUTTON_L2) != 0 &&
-            catalogType != "publicdomain") {
-            catalogType = "publicdomain";
-            loadActiveCatalog();
-        }
         if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && previewVisible) {
             avPlayer.togglePause();
             notify(avPlayer.paused()
                 ? "Stremio: playback paused"
                 : "Stremio: playback resumed");
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-            !detailVisible && !streamVisible) {
+            !detailVisible && !streamVisible && catalogScreen) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
                 notify("Stremio: loading metadata details...");
@@ -749,11 +986,15 @@ int main() {
                 notify("Stremio: rejected non-HTTPS direct stream");
             }
         }
-        if (!previewVisible &&
+        if (!previewVisible && activeTab < 3 &&
             (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
             loadActiveCatalog();
         }
-        if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
+        const bool localPlaybackRequested =
+            ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
+            (shellVisible && activeTab == 4 && settingsSelection == 0 &&
+             (pressed & ORBIS_PAD_BUTTON_CROSS) != 0);
+        if (localPlaybackRequested) {
             previewVisible = false;
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
@@ -769,7 +1010,10 @@ int main() {
                 notify(result);
             }
         }
-        if ((pressed & ORBIS_PAD_BUTTON_R2) != 0 && !previewVisible) {
+        const bool remotePlaybackRequested = shellVisible && activeTab == 4 &&
+            settingsSelection == 1 &&
+            (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+        if (remotePlaybackRequested) {
             previewVisible = false;
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
@@ -883,15 +1127,22 @@ int main() {
                 ? &catalogPosters[detailPosterIndex] : nullptr;
             drawDetails(
                 scene, details, poster, catalogType, detailEpisodeIndex);
+        } else if (activeTab == 3 && !searchShowingResults) {
+            drawSearch(scene, searchQuery, searchKey, indicatorX,
+                animationFrame);
+        } else if (activeTab == 4) {
+            drawSettings(scene, settingsSelection, indicatorX);
         } else {
             drawHardwareProbe(
                 scene, focusedCard, catalogPage, catalogType, catalogStatus,
-                catalogItems, catalogPosters);
+                catalogItems, catalogPosters, activeTab, indicatorX,
+                animationFrame);
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
         ++frameId;
+        ++animationFrame;
 
     }
 }
