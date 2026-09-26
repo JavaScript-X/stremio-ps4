@@ -147,6 +147,7 @@ public:
     bool copyPreview(std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height) const;
     bool paused() const { return paused_; }
     uint64_t decodedFrames() const;
+    uint32_t measuredFpsTimesTen() const;
     uint64_t currentTime() const;
     uint64_t duration() const { return duration_; }
 
@@ -165,6 +166,10 @@ private:
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;
     uint64_t decodedFrames_ = 0;
+    mutable uint64_t deliveredFrame_ = 0;
+    uint64_t fpsWindowStart_ = 0;
+    uint32_t fpsWindowFrames_ = 0;
+    uint32_t measuredFpsTimesTen_ = 0;
     uint64_t duration_ = 0;
     pthread_t decoderThread_ = {};
     mutable pthread_mutex_t previewMutex_ = {};

@@ -252,7 +252,8 @@ void drawDecodedPreview(
     bool paintBackground,
     uint64_t currentTime,
     uint64_t duration,
-    bool paused) {
+    bool paused,
+    uint32_t decoderFpsTimesTen) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
     const Color track = {45, 45, 58};
@@ -278,12 +279,14 @@ void drawDecodedPreview(
         scene.DrawRectangle(timelineX, 870, progress, 14, purple);
     }
     char clock[96];
-    snprintf(clock, sizeof(clock), "%s   %02llu:%02llu / %02llu:%02llu",
+    snprintf(clock, sizeof(clock),
+        "%s   %02llu:%02llu / %02llu:%02llu   DECODE %u.%u FPS",
         paused ? "PAUSED" : "PLAYING",
         static_cast<unsigned long long>(currentTime / 60000),
         static_cast<unsigned long long>((currentTime / 1000) % 60),
         static_cast<unsigned long long>(duration / 60000),
-        static_cast<unsigned long long>((duration / 1000) % 60));
+        static_cast<unsigned long long>((duration / 1000) % 60),
+        decoderFpsTimesTen / 10, decoderFpsTimesTen % 10);
     scene.DrawText(480, 910, clock, text, 2);
 }
 
@@ -515,7 +518,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.60: cached HTTPS playback and timeline");
+    notify("Stremio 1.70: smoother playback and live decode FPS");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -851,7 +854,8 @@ int main() {
             drawDecodedPreview(
                 scene, previewPixels, previewWidth, previewHeight,
                 previewBackgroundFrames > 0, avPlayer.currentTime(),
-                avPlayer.duration(), avPlayer.paused());
+                avPlayer.duration(), avPlayer.paused(),
+                avPlayer.measuredFpsTimesTen());
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }

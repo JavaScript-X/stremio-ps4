@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.60 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 1.70 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -52,7 +52,11 @@ path. A separate legal remote Sintel probe downloads through the app's
 certificate-verified HTTPS client into persistent app storage and then feeds
 that local cache to AVPlayer. The first run downloads the 4.37 MB trailer and
 later runs reuse it. Playback now includes a native progress bar, elapsed/total
-clock, and visible playing/paused state.
+clock, visible playing/paused state, and a live measured decoder-FPS counter.
+The playback pipeline keeps reusable conversion surfaces, transfers a preview
+only when a new decoded frame exists, and gives AVPlayer a six-frame output
+queue. These changes remove per-frame heap churn and redundant 60 Hz copies
+while keeping the interface and controller loop at 60 FPS.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:

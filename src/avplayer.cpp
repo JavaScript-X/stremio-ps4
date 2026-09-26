@@ -109,6 +109,10 @@ bool AvPlayerProbe::start(const char* url) {
     previewWidth_ = 0;
     previewHeight_ = 0;
     decodedFrames_ = 0;
+    deliveredFrame_ = 0;
+    fpsWindowStart_ = 0;
+    fpsWindowFrames_ = 0;
+    measuredFpsTimesTen_ = 0;
     duration_ = 0;
     stopDecoderThread_ = false;
     started_ = false;
@@ -136,7 +140,9 @@ bool AvPlayerProbe::start(const char* url) {
     init.memoryReplacement.deallocateTexture = releaseTexture;
     init.eventReplacement.eventCallback = playerEvent;
     init.basePriority = 160;
-    init.numOutputVideoFrameBuffers = 4;
+    // Six buffers give the hardware decoder enough room to run ahead while
+    // the CPU converts the previous NV12 frame for the native framebuffer.
+    init.numOutputVideoFrameBuffers = 6;
     init.autoStart = 0;
     init.defaultLanguage = "en";
 
@@ -220,6 +226,9 @@ void* AvPlayerProbe::decoderThreadEntry(void* argument) {
 }
 
 void AvPlayerProbe::decoderLoop() {
+    // Keep two allocations rotating between the decoder and renderer. The old
+    // implementation allocated and freed a conversion surface every frame.
+    std::vector<uint32_t> converted;
     while (!stopDecoderThread_) {
         if (paused_ || !sceAvPlayerIsActive(handle_)) {
             sceKernelUsleep(1000);
@@ -238,7 +247,7 @@ void AvPlayerProbe::decoderLoop() {
             : frameWidth;
         const uint32_t outputWidth = frameWidth / 2;
         const uint32_t outputHeight = frameHeight / 2;
-        std::vector<uint32_t> converted(static_cast<size_t>(outputWidth) * outputHeight);
+        converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
 
         const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
         const uint8_t* chroma = luma + static_cast<size_t>(pitch) * frameHeight;
@@ -266,6 +275,18 @@ void AvPlayerProbe::decoderLoop() {
         previewHeight_ = outputHeight;
         preview_.swap(converted);
         ++decodedFrames_;
+        ++fpsWindowFrames_;
+        const uint64_t now = sceKernelGetProcessTime();
+        if (fpsWindowStart_ == 0) {
+            fpsWindowStart_ = now;
+            fpsWindowFrames_ = 0;
+        } else if (now - fpsWindowStart_ >= 1000000) {
+            measuredFpsTimesTen_ = static_cast<uint32_t>(
+                static_cast<uint64_t>(fpsWindowFrames_) * 10000000 /
+                (now - fpsWindowStart_));
+            fpsWindowStart_ = now;
+            fpsWindowFrames_ = 0;
+        }
         pthread_mutex_unlock(&previewMutex_);
     }
 }
@@ -324,12 +345,24 @@ uint64_t AvPlayerProbe::decodedFrames() const {
     return result;
 }
 
+uint32_t AvPlayerProbe::measuredFpsTimesTen() const {
+    pthread_mutex_lock(&previewMutex_);
+    const uint32_t result = measuredFpsTimesTen_;
+    pthread_mutex_unlock(&previewMutex_);
+    return result;
+}
+
 bool AvPlayerProbe::copyPreview(
     std::vector<uint32_t>& pixels, uint32_t& width, uint32_t& height) const {
     pthread_mutex_lock(&previewMutex_);
+    if (decodedFrames_ == deliveredFrame_) {
+        pthread_mutex_unlock(&previewMutex_);
+        return false;
+    }
     pixels = preview_;
     width = previewWidth_;
     height = previewHeight_;
+    deliveredFrame_ = decodedFrames_;
     pthread_mutex_unlock(&previewMutex_);
     return !pixels.empty();
 }
