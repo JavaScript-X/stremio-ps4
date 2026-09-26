@@ -27,6 +27,7 @@
 #include "avplayer.h"
 #include "catalog.h"
 #include "poster.h"
+#include "videodec2.h"
 
 std::stringstream debugLogStream;
 
@@ -60,6 +61,8 @@ constexpr const char* kPublicDomainBaseUrl =
 constexpr const char* kLegalRemoteVideoUrl =
     "https://media.w3.org/2010/05/sintel/trailer.mp4";
 constexpr const char* kLegalRemoteCachePath = "/data/stremio-remote-sintel.mp4";
+constexpr const char* kDirectVideoTestPath =
+    "/app0/assets/sintel-1080p-high-annexb.h264";
 constexpr size_t kMaximumDemoVideoBytes = 16 * 1024 * 1024;
 constexpr size_t kLegalRemoteVideoBytes = 4372373;
 constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
@@ -208,11 +211,10 @@ void drawHardwareProbe(
         const int itemIndex = rowPage * 4 + index;
         const int x = cardX[index] + (310 - cardWidth) / 2;
         if (selected && index == focusedCard) {
-            const int pulse = (animationFrame / 8) % 2;
-            scene.DrawRoundedRectangle(x - 8 - pulse,
-                rowY - 8 - pulse,
-                cardWidth + 16 + pulse * 2,
-                cardHeight + 16 + pulse * 2, 22, focus);
+            // Keep focus stable. A flashing/pulsing border distracts from the
+            // poster artwork and costs redraw work on every catalog frame.
+            scene.DrawRoundedRectangle(x - 9, rowY - 9,
+                cardWidth + 18, cardHeight + 18, 24, focus);
         }
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
@@ -316,15 +318,25 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
             index == 3 ? text : muted, 2);
     }
     scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
-    scene.DrawText(120, 185, "SEARCH CINEMETA", text, 3);
-    scene.DrawRoundedRectangle(220, 300, 1480, 110, 24, header);
+    scene.DrawText(120, 185, "SEARCH", text, 4);
+    scene.DrawText(120, 245,
+        "FIND MOVIES AND SERIES ACROSS THE CINEMETA CATALOG", muted, 2);
+    scene.DrawRoundedRectangle(170, 305, 1580, 180, 30, header);
+    scene.DrawRoundedRectangle(205, 345, 68, 68, 20, purple);
+    scene.DrawText(226, 359, "?", text, 4);
+    scene.DrawText(305, 335, "TITLE", muted, 2);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
-    scene.DrawText(270, 335, shown.c_str(), query.empty() ? muted : text, 3);
-    scene.DrawText(270, 455,
-        "PRESS CROSS TO TYPE WITH THE PS4 KEYBOARD", muted, 2);
-    scene.DrawText(270, 500,
-        "CROSS TYPE   SQUARE DELETE   TRIANGLE SPACE   R2 SEARCH   CIRCLE CLOSE",
-        text, 2);
+    scene.DrawText(305, 382, shown.c_str(), query.empty() ? muted : text, 3);
+    scene.DrawRoundedRectangle(170, 535, 760, 235, 26, header);
+    scene.DrawText(215, 575, "PS4 SYSTEM KEYBOARD", text, 3);
+    scene.DrawText(215, 630, "CROSS   TYPE / SELECT", muted, 2);
+    scene.DrawText(215, 670, "SQUARE  DELETE    TRIANGLE  SPACE", muted, 2);
+    scene.DrawText(215, 710, "R2      SEARCH    CIRCLE    CLOSE", muted, 2);
+    scene.DrawRoundedRectangle(970, 535, 780, 235, 26, header);
+    scene.DrawText(1015, 575, "SEARCH TIPS", text, 3);
+    scene.DrawText(1015, 630, "TRY THE FULL TITLE FOR BEST RESULTS", muted, 2);
+    scene.DrawText(1015, 670, "POSTERS LOAD PROGRESSIVELY AND CACHE", muted, 2);
+    scene.DrawText(1015, 710, "TRIANGLE REPEATS THE CURRENT SEARCH", muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
@@ -357,11 +369,22 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     const Color focus = {196, 174, 255};
     const Color text = {235, 232, 244};
     drawSettingsHeader(scene, indicatorX, title);
+    scene.DrawRoundedRectangle(95, 245, 1730, 650, 30, header);
     for (int index = 0; index < rowCount; ++index) {
-        const int y = 220 + index * 105;
-        if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
-        scene.DrawRectangle(120, y, 1680, 70, header);
-        scene.DrawText(155, y + 22, rows[index], text, 2);
+        const int y = 275 + index * 92;
+        const bool focused = index == selected;
+        scene.DrawRoundedRectangle(125, y, 1670, 72, 18,
+            focused ? focus : Color{35, 35, 46});
+        scene.DrawRoundedRectangle(145, y + 12, 48, 48, 14,
+            focused ? Color{123, 91, 214} : Color{52, 52, 68});
+        char number[8];
+        snprintf(number, sizeof(number), "%02d", index + 1);
+        scene.DrawText(153, y + 23, number, text, 2);
+        scene.DrawText(225, y + 23, rows[index],
+            focused ? Color{18, 18, 24} : text, 2);
+        if (focused) {
+            scene.DrawText(1705, y + 23, ">", Color{18, 18, 24}, 2);
+        }
     }
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
@@ -374,7 +397,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.72"};
+        "ABOUT STREMIO  v2.80"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -383,13 +406,54 @@ void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "SONY AVPLAYER + RGB PREVIEW",
         "SONY AVPLAYER DECODE-ONLY",
-        "SONY AVPLAYER PERFORMANCE / LEGACY API"};
-    drawSettingsRows(scene, rows, 3, selected, indicatorX,
+        "SONY AVPLAYER PERFORMANCE / LEGACY API",
+        "DIRECT VIDEODEC2 GPU / EXPERIMENTAL"};
+    drawSettingsRows(scene, rows, 4, selected, indicatorX,
         "PLAYBACK TESTS / PLAYER MODE", "SELECT");
 }
 
+void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder) {
+    const Color background = {8, 8, 12};
+    const Color panel = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawVerticalFade(0, 0, kWidth, 220, panel, 235, 0);
+    drawBrand(scene, text);
+    scene.DrawText(120, 190, "DIRECT VIDEODEC2 GPU BENCHMARK", text, 4);
+    scene.DrawRoundedRectangle(280, 315, 1360, 430, 34, panel);
+    scene.DrawRoundedRectangle(330, 370, 120, 120, 30, purple);
+    scene.DrawText(365, 405, "GPU", text, 3);
+    scene.DrawText(505, 370, "H.264 HIGH L4.1   1920x1080 / 24 FPS", text, 3);
+    scene.DrawText(505, 430,
+        "RAW ANNEX-B ACCESS UNITS - AVPLAYER BYPASSED", muted, 2);
+    scene.DrawText(505, 480,
+        "SAFE DECODE-ONLY MODE - NO FIRMWARE VIDEOOUT PATCHES", muted, 2);
+    char metrics[160];
+    snprintf(metrics, sizeof(metrics),
+        "OUTPUT %ux%u    FRAMES %llu    DECODE %u.%u FPS",
+        decoder.width(), decoder.height(),
+        static_cast<unsigned long long>(decoder.decodedFrames()),
+        decoder.measuredFpsTimesTen() / 10,
+        decoder.measuredFpsTimesTen() % 10);
+    scene.DrawRoundedRectangle(505, 555, 1035, 90, 22, background);
+    scene.DrawText(545, 585, metrics, text, 2);
+    scene.DrawText(505, 680,
+        "TARGET: 24.0 FPS. THIS RESULT IS THE HARDWARE DECODER RATE.", purple, 2);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
+    drawButtonHint(scene, 1640, 1020, 'O', "STOP");
+}
+
 void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
-    bool decodeOnly, bool legacyApi) {
+    bool decodeOnly, bool legacyApi, bool directVideoDec2) {
+    if (directVideoDec2) {
+        const char* directRows[] = {
+            "1080P HIGH L4.1 / RAW ANNEX-B / GPU DECODE-ONLY"};
+        drawSettingsRows(scene, directRows, 1, selected, indicatorX,
+            "DIRECT VIDEODEC2 / SELECT TEST", "RUN");
+        return;
+    }
     const char* rows[] = {
         "LOCAL H.264  640x360",
         "LOCAL H.264  854x480",
@@ -446,28 +510,40 @@ void drawDetails(
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(90, 70, 1740, 90, purple);
-    scene.DrawText(125, 96, "DETAILS", text, 4);
-    scene.DrawRectangle(90, 190, 390, 610, panel);
+    scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 235, 0);
+    drawBrand(scene, text);
+    scene.DrawText(1450, 48,
+        catalogType == "series" ? "SERIES DETAILS" : "MOVIE DETAILS",
+        muted, 2);
+    scene.DrawRoundedRectangle(90, 175, 430, 650, 30, panel);
+    scene.DrawRoundedRectangle(124, 209, 322, 422, 22, purple);
     if (poster && poster->valid()) {
-        scene.BlitRgb(130, 230, poster->width, poster->height,
+        scene.BlitRgbRounded(130, 215, poster->width, poster->height, 18,
             poster->pixels.data());
     }
     const std::string title = details.name.size() > 42
         ? details.name.substr(0, 39) + "..." : details.name;
-    scene.DrawText(540, 220, title.c_str(), text, 3);
-    const std::string facts =
-        (catalogType == "series" ? "SERIES   " : "MOVIE   ") +
-        details.releaseInfo + "   " + details.runtime +
-        (details.imdbRating.empty() ? "" : "   IMDB " + details.imdbRating);
-    scene.DrawText(540, 285, facts.c_str(), muted, 2);
+    scene.DrawText(575, 200, title.c_str(), text, 4);
+    int badgeX = 575;
+    auto drawBadge = [&](const std::string& value, int width) {
+        if (value.empty()) return;
+        scene.DrawRoundedRectangle(badgeX, 280, width, 48, 16, panel);
+        scene.DrawText(badgeX + 18, 294, value.c_str(), muted, 2);
+        badgeX += width + 16;
+    };
+    drawBadge(catalogType == "series" ? "SERIES" : "MOVIE", 125);
+    drawBadge(details.releaseInfo, 170);
+    drawBadge(details.runtime, 170);
+    if (!details.imdbRating.empty())
+        drawBadge("IMDB " + details.imdbRating, 190);
     if (!details.genres.empty()) {
-        scene.DrawText(540, 325, details.genres.c_str(), muted, 2);
+        scene.DrawText(575, 355, details.genres.c_str(), purple, 2);
     }
+    scene.DrawText(575, 415, "OVERVIEW", muted, 2);
     const std::vector<std::string> lines =
-        wrapText(details.description, 68, 13);
+        wrapText(details.description, 67, 10);
     for (size_t line = 0; line < lines.size(); ++line) {
-        scene.DrawText(540, 375 + static_cast<int>(line) * 35,
+        scene.DrawText(575, 465 + static_cast<int>(line) * 36,
             lines[line].c_str(), text, 2);
     }
     if (!details.episodes.empty() && episodeIndex >= 0 &&
@@ -479,10 +555,13 @@ void drawDetails(
             episode.season, episode.episode, episodeIndex + 1,
             static_cast<int>(details.episodes.size()),
             episode.title.empty() ? "" : "   ", episode.title.c_str());
-        scene.DrawRectangle(520, 845, 1190, 60, panel);
-        scene.DrawText(545, 865, episodeText, text, 2);
+        scene.DrawRoundedRectangle(575, 840, 1180, 72, 20, panel);
+        scene.DrawRectangle(575, 840, 8, 72, purple);
+        scene.DrawText(610, 863, episodeText, text, 2);
     }
-    scene.DrawRectangle(0, 1000, kWidth, 80, panel);
+    scene.DrawText(145, 675, "STREMIO METADATA", muted, 2);
+    scene.DrawText(145, 720, "CACHED FOR FASTER REVISITS", muted, 2);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
     if (catalogType == "series")
         drawButtonHint(scene, 1620, 1020, 'X', "SELECT EPISODE");
@@ -500,25 +579,36 @@ void drawStreams(
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(90, 70, 1740, 90, purple);
-    scene.DrawText(125, 96, "STREAMS", text, 4);
-    scene.DrawText(125, 190, details.name.c_str(), text, 3);
+    scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 235, 0);
+    drawBrand(scene, text);
+    scene.DrawText(120, 180, "AVAILABLE STREAMS", text, 4);
+    scene.DrawText(120, 235, details.name.c_str(), muted, 2);
+    scene.DrawRoundedRectangle(1420, 175, 360, 70, 20, purple);
+    char count[64];
+    snprintf(count, sizeof(count), "%d SOURCES FOUND",
+        static_cast<int>(streams.size()));
+    scene.DrawText(1470, 197, count, text, 2);
     for (int index = 0; index < static_cast<int>(streams.size()) && index < 6;
          ++index) {
-        const int y = 280 + index * 100;
-        if (index == focusedStream) {
-            scene.DrawRectangle(115, y - 8, 1690, 76, focus);
-        }
-        scene.DrawRectangle(125, y, 1670, 60, panel);
+        const int y = 300 + index * 92;
+        const bool selected = index == focusedStream;
+        scene.DrawRoundedRectangle(120, y, 1680, 72, 18,
+            selected ? focus : panel);
+        scene.DrawRoundedRectangle(145, y + 12, 48, 48, 14,
+            selected ? purple : Color{52, 52, 68});
+        char sourceNumber[8];
+        snprintf(sourceNumber, sizeof(sourceNumber), "%02d", index + 1);
+        scene.DrawText(153, y + 23, sourceNumber, text, 2);
         const StreamItem& stream = streams[index];
         const std::string label = !stream.name.empty() ? stream.name :
             (!stream.title.empty() ? stream.title : "STREAM");
-        scene.DrawText(155, y + 18, label.c_str(), text, 2);
-        scene.DrawText(900, y + 18,
+        scene.DrawText(225, y + 23, label.c_str(),
+            selected ? background : text, 2);
+        scene.DrawText(1200, y + 23,
             stream.url.empty() ? "TORRENT - COMPANION REQUIRED" : "DIRECT HTTPS",
-            stream.url.empty() ? muted : text, 2);
+            selected ? background : (stream.url.empty() ? muted : text), 2);
     }
-    scene.DrawRectangle(0, 1000, kWidth, 80, panel);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
     drawButtonHint(scene, 1590, 1020, 'X', "PLAY / INSPECT");
 }
@@ -1152,6 +1242,7 @@ int main() {
     int focusedCard = 0;
     uint32_t previousButtons = 0;
     AvPlayerProbe avPlayer;
+    VideoDec2Probe videoDec2;
     AvPlayerProbe::State previousPlayerState = AvPlayerProbe::State::Idle;
     int avPlayerProbeFrames = 0;
     bool previewVisible = false;
@@ -1177,6 +1268,7 @@ int main() {
     int settingsPage = 0;
     bool playbackDecodeOnly = false;
     bool playbackLegacyApi = false;
+    bool playbackDirectVideoDec2 = false;
     bool activePlaybackDecodeOnly = false;
     bool activePlaybackLegacyApi = false;
     int queuedPlaybackTest = -1;
@@ -1442,7 +1534,9 @@ int main() {
         previousButtons = buttons;
 
         if ((pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-            if (previewVisible ||
+            if (videoDec2.state() != VideoDec2Probe::State::Idle) {
+                videoDec2.stop();
+            } else if (previewVisible ||
                 avPlayer.state() != AvPlayerProbe::State::Idle) {
                 DEBUGLOG << "Options pressed during playback; returning to shell";
                 avPlayer.stop();
@@ -1453,7 +1547,8 @@ int main() {
         }
 
         const bool shellVisible =
-            !previewVisible && !detailVisible && !streamVisible;
+            !previewVisible && !detailVisible && !streamVisible &&
+            videoDec2.state() == VideoDec2Probe::State::Idle;
         const bool catalogScreen = activeTab < 3 ||
             (activeTab == 3 && searchShowingResults);
         if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
@@ -1529,7 +1624,8 @@ int main() {
             }
         } else if (shellVisible && activeTab == 4) {
             const int maximumSelection = settingsPage == 0 ? 2 :
-                (settingsPage == 1 ? 2 : (settingsPage == 2 ? 5 : 0));
+                (settingsPage == 1 ? 3 : (settingsPage == 2 ?
+                    (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
@@ -1552,6 +1648,7 @@ int main() {
                 } else if (settingsPage == 1) {
                     playbackDecodeOnly = settingsSelection != 0;
                     playbackLegacyApi = settingsSelection == 2;
+                    playbackDirectVideoDec2 = settingsSelection == 3;
                     settingsPage = 2;
                     settingsSelection = 0;
                 } else if (settingsPage == 2) {
@@ -1647,7 +1744,8 @@ int main() {
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
-            (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 4);
+            (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 4 &&
+                !playbackDirectVideoDec2);
         if (localPlaybackRequested) {
             stopBackgroundForPlayback();
             previewVisible = false;
@@ -1677,6 +1775,17 @@ int main() {
                     avPlayer.errorStage(),
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
+            }
+            queuedPlaybackTest = -1;
+        }
+        const bool directPlaybackRequested = queuedPlaybackTest == 0 &&
+            playbackDirectVideoDec2;
+        if (directPlaybackRequested) {
+            stopBackgroundForPlayback();
+            avPlayer.stop();
+            notify("Stremio: starting direct Videodec2 GPU benchmark");
+            if (!videoDec2.start(kDirectVideoTestPath)) {
+                notify("Stremio: Videodec2 worker could not start");
             }
             queuedPlaybackTest = -1;
         }
@@ -1721,6 +1830,9 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+            videoDec2.state() != VideoDec2Probe::State::Idle) {
+            videoDec2.stop();
             previewVisible = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             avPlayer.state() != AvPlayerProbe::State::Idle) {
@@ -1769,7 +1881,32 @@ int main() {
             previousPlayerState = avPlayer.state();
         }
 
-        if (previewVisible) {
+        if (videoDec2.state() != VideoDec2Probe::State::Idle) {
+            drawVideoDec2Test(scene, videoDec2);
+            static VideoDec2Probe::State reportedVideoDec2State =
+                VideoDec2Probe::State::Idle;
+            if (videoDec2.state() != reportedVideoDec2State) {
+                if (videoDec2.state() == VideoDec2Probe::State::Passed) {
+                    notify("Stremio: direct Videodec2 produced GPU frames");
+                } else if (videoDec2.state() == VideoDec2Probe::State::Finished) {
+                    char result[128];
+                    snprintf(result, sizeof(result),
+                        "Stremio: Videodec2 %u.%u fps / %llu frames",
+                        videoDec2.measuredFpsTimesTen() / 10,
+                        videoDec2.measuredFpsTimesTen() % 10,
+                        static_cast<unsigned long long>(videoDec2.decodedFrames()));
+                    notify(result);
+                } else if (videoDec2.state() == VideoDec2Probe::State::Failed) {
+                    char result[128];
+                    snprintf(result, sizeof(result),
+                        "Stremio: Videodec2 stage %d code 0x%08x",
+                        videoDec2.errorStage(),
+                        static_cast<unsigned int>(videoDec2.errorCode()));
+                    notify(result);
+                }
+                reportedVideoDec2State = videoDec2.state();
+            }
+        } else if (previewVisible) {
             avPlayer.copyPreview(previewPixels, previewWidth, previewHeight);
             drawDecodedPreview(
                 scene, previewPixels, previewWidth, previewHeight,
@@ -1813,7 +1950,8 @@ int main() {
                 drawPlayerSelection(scene, settingsSelection, indicatorX);
             } else if (settingsPage == 2) {
                 drawQualitySelection(scene, settingsSelection, indicatorX,
-                    playbackDecodeOnly, playbackLegacyApi);
+                    playbackDecodeOnly, playbackLegacyApi,
+                    playbackDirectVideoDec2);
             } else if (settingsPage == 3) {
                 drawAbout(scene, indicatorX);
             } else {
@@ -1842,6 +1980,7 @@ int main() {
 
     DEBUGLOG << "Stremio graceful shutdown starting";
     avPlayer.stop();
+    videoDec2.stop();
     for (int index = 0; index < 3; ++index) {
         CatalogLoadJob& job = catalogJobs[index];
         const bool wasRunning = job.running.load(std::memory_order_acquire);

@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.72 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.80 provides a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -45,7 +45,7 @@ navigation remains responsive while purple Stremio placeholders appear
 immediately. The next row stays fixed and preloaded; pressing Down promotes it
 with a short bottom-to-top slide instead of continuously animating every card.
 Poster compositing uses contiguous scanline copies to keep menu rendering near
-60 FPS while selected cards retain a soft rounded focus animation.
+60 FPS while selected cards retain a stable, non-flashing rounded focus frame.
 The left analog stick mirrors D-pad navigation. Search opens the native PS4
 system keyboard after consuming the opening Cross press, preventing that input
 from immediately closing the IME, and queries the canonical Cinemeta endpoint.
@@ -114,6 +114,13 @@ Version 2.72 adds an experimental Sony AVPlayer performance mode using the
 legacy frame API, a higher-priority AVPlayer worker, and twelve output buffers.
 It is decode-only until hardware testing proves that its 1080p frame delivery
 is faster and stable enough to become the basis of a visible renderer.
+Version 2.80 redesigns Search, Settings, movie/series details, and stream-source
+pages with larger hierarchy, rounded panels, readable badges, consistent
+footers, and fixed focus states. It also introduces a fourth, experimental
+direct Videodec2 GPU benchmark. That benchmark bypasses AVPlayer and MP4
+demuxing, feeds packaged Annex-B H.264 access units from coherent Onion memory,
+and reports the raw 1080p hardware-decoder rate. It is decode-only and does not
+install firmware-specific YUV VideoOut patches, keeping the 13.02 test safe.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies
@@ -126,8 +133,6 @@ System termination now stops AVPlayer before joining its frame worker, then
 closes the decoder, IME, controller, HTTP, SSL, network, and user services in a
 single orderly path. Native-style colored PS button badges replace the old
 text-only control legends in screen-corner footers.
-Settings also provides **Exit Application Safely** as an explicit way to run
-the same cleanup path before returning to the system menu.
 It does not log in, load user addons, or present decoded audio yet.
 
 Controller controls:
