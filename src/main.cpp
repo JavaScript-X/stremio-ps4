@@ -181,7 +181,6 @@ void drawHardwareProbe(
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
     const Color stremioPurple = {123, 91, 214};
-    const Color card = {45, 45, 58};
     const Color cardMuted = {35, 35, 46};
     const Color focus = {196, 174, 255};
     const Color text = {235, 232, 244};
@@ -208,61 +207,56 @@ void drawHardwareProbe(
         text, 3);
     const int cardX[] = {120, 565, 1010, 1455};
     const int cardY = 260 + catalogMotion;
-    for (int index = 0; index < 4; ++index) {
-        const int itemIndex = page * 4 + index;
-        if (index == focusedCard) {
+    auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
+                              bool showTitles) {
+        if (rowPage < 0 || rowY >= 1000 || rowY + 460 <= 145) return;
+        for (int index = 0; index < 4; ++index) {
+        const int itemIndex = rowPage * 4 + index;
+        if (selected && index == focusedCard) {
             const int pulse = (animationFrame / 8) % 2;
             scene.DrawRoundedRectangle(cardX[index] - 8 - pulse,
-                cardY - 8 - pulse,
+                rowY - 8 - pulse,
                 326 + pulse * 2, 426 + pulse * 2, 22, focus);
         }
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
         if (posterReady) {
-            scene.BlitRgbMasked(cardX[index], cardY, posters[itemIndex].width,
+            scene.BlitRgbMasked(cardX[index], rowY, posters[itemIndex].width,
                 posters[itemIndex].height, posters[itemIndex].pixels.data());
         } else {
-            scene.DrawRoundedRectangle(cardX[index], cardY, 310, 410, 18,
+            scene.DrawRoundedRectangle(cardX[index], rowY, 310, 410, 18,
                 stremioPurple);
-            scene.DrawRoundedRectangle(cardX[index] + 95, cardY + 142,
+            scene.DrawRoundedRectangle(cardX[index] + 95, rowY + 142,
                 120, 120, 28, cardMuted);
-            if (headerLogo.valid()) {
-                scene.BlitRgbScaledRounded(cardX[index] + 107, cardY + 154,
+            if (headerLogo.valid() && rowY >= 0 && rowY + 410 <= kHeight) {
+                scene.BlitRgbScaledRounded(cardX[index] + 107, rowY + 154,
                     96, 96, 20, headerLogo.pixels.data(), headerLogo.width,
                     headerLogo.height);
             }
-            scene.DrawText(cardX[index] + 85, cardY + 292,
+            scene.DrawText(cardX[index] + 85, rowY + 292,
                 "LOADING", text, 2);
         }
-        if (itemIndex < static_cast<int>(items.size())) {
+        if (showTitles && itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
-            scene.DrawText(cardX[index], cardY + 430, title.c_str(), text, 2);
+            scene.DrawText(cardX[index], rowY + 430, title.c_str(), text, 2);
         }
-    }
+        }
+    };
+
+    // During paging, preserve the old row and move it out while the exact
+    // cards that were visible below move into the selected position.
+    if (catalogMotion > 0)
+        drawCatalogRow(page - 1, cardY - 560, false, true);
+    else if (catalogMotion < 0)
+        drawCatalogRow(page + 1, cardY + 560, false, true);
+    drawCatalogRow(page, cardY, true, true);
 
     const int nextPage = page + 1;
     // The next row stays still. Movement belongs to page selection, not an
     // always-running animation that consumes GPU time and looks like jumping.
-    constexpr int previewY = 820;
-    for (int index = 0; index < 4; ++index) {
-        const int itemIndex = nextPage * 4 + index;
-        const int x = 170 + index * 430;
-        const bool previewReady = itemIndex < static_cast<int>(posters.size()) &&
-            posters[itemIndex].previewValid();
-        if (previewReady) {
-            scene.BlitRgb(x, previewY, posters[itemIndex].previewWidth,
-                posters[itemIndex].previewHeight,
-                posters[itemIndex].previewPixels.data());
-        } else {
-            scene.DrawRoundedRectangle(x, previewY, 220, 290, 16,
-                stremioPurple);
-            if (headerLogo.valid()) {
-                scene.BlitRgbScaledRounded(x + 74, previewY + 97, 72, 72, 16,
-                    headerLogo.pixels.data(), headerLogo.width,
-                    headerLogo.height);
-            }
-        }
-    }
+    const int previewY = 820 + (catalogMotion > 0 ? catalogMotion : 0);
+    if (catalogMotion >= 0)
+        drawCatalogRow(nextPage, previewY, false, false);
 
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
     scene.DrawRectangle(0, 1000, kWidth, 80, header);
@@ -277,7 +271,7 @@ void drawHardwareProbe(
 }
 
 void drawSearch(Scene2D& scene, const std::string& query, int,
-    int indicatorX, int animationFrame) {
+    int indicatorX, int) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
     const Color purple = {123, 91, 214};
@@ -296,10 +290,8 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawRoundedRectangle(220, 300, 1480, 110, 24, header);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
     scene.DrawText(270, 335, shown.c_str(), query.empty() ? muted : text, 3);
-    const int pulse = (animationFrame / 10) % 2;
-    scene.DrawRoundedRectangle(630 - pulse, 510 - pulse,
-        660 + pulse * 2, 115 + pulse * 2, 28, purple);
-    scene.DrawText(760, 548, "OPEN PS4 KEYBOARD", text, 3);
+    scene.DrawText(270, 455,
+        "PRESS CROSS TO TYPE WITH THE PS4 KEYBOARD", muted, 2);
     scene.DrawRectangle(0, 1000, kWidth, 80, header);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
@@ -329,9 +321,8 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "LOCAL H.264 PLAYBACK TEST",
         "CACHED HTTPS PLAYBACK TEST",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.30",
-        "EXIT APPLICATION SAFELY"};
-    for (int index = 0; index < 5; ++index) {
+        "ABOUT STREMIO PS4  v2.40"};
+    for (int index = 0; index < 4; ++index) {
         const int y = 270 + index * 130;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
         scene.DrawRectangle(120, y, 1680, 70, header);
@@ -916,13 +907,9 @@ int main() {
     signal(SIGTERM, requestExit);
     signal(SIGINT, requestExit);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 2.30: instant catalogs and smooth scrolling");
-
     int userId = -1;
     const int pad = initializeController(userId);
-    notify(pad >= 0
-        ? "Stremio: controller ready"
-        : "Stremio: controller initialization failed");
+    if (pad < 0) notify("Stremio: controller initialization failed");
 
     Scene2D scene(kWidth, kHeight, kPixelDepth);
     if (!scene.Init(kVideoMemory, kFrameBuffers)) {
@@ -938,7 +925,6 @@ int main() {
     }
 
     DEBUGLOG << "Video initialized at 1920x1080; rendering hardware probe";
-    notify("Stremio: video ready");
 
     int frameId = 1;
     int focusedCard = 0;
@@ -1059,7 +1045,6 @@ int main() {
             notify("Stremio: enter a search title first");
             return;
         }
-        notify("Stremio: searching Cinemeta movies...");
         catalogItems.clear();
         catalogPosters.clear();
         const int result = fetchCatalogPage(
@@ -1075,11 +1060,9 @@ int main() {
             focusedCard = 0;
             catalogType = "movie";
             searchShowingResults = true;
-            notify("Stremio: search results ready");
         } else {
             catalogStatus = "NO SEARCH RESULTS - CIRCLE TO EDIT";
             searchShowingResults = true;
-            notify("Stremio: no search results");
         }
     };
 
@@ -1124,11 +1107,6 @@ int main() {
                 catalogPosters.swap(job.posters);
                 catalogStatus.swap(job.status);
                 job.loaded = false;
-                char ready[96];
-                snprintf(ready, sizeof(ready),
-                    "Stremio: %d catalog items ready",
-                    static_cast<int>(catalogItems.size()));
-                notify(ready);
             }
         }
         if (activeTab < 3 && catalogItems.empty() &&
@@ -1146,10 +1124,8 @@ int main() {
                 DEBUGLOG << "Options pressed during playback; returning to shell";
                 avPlayer.stop();
                 previewVisible = false;
-                notify("Stremio: playback stopped; Options again exits");
             } else {
                 DEBUGLOG << "Options pressed from shell; Home API disabled";
-                notify("Stremio: use the PS button to go Home");
             }
         }
 
@@ -1175,10 +1151,12 @@ int main() {
 
         if (shellVisible && activeTab == 3 && !searchShowingResults) {
             if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
+                // The same Cross press must not leak into the native IME and
+                // immediately accept/close it. Wait for a clean release first.
+                while ((readButtons(pad) & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                    !exitRequested) sceKernelUsleep(8000);
                 if (openSystemSearchKeyboard(userId, searchQuery)) {
                     loadSearchResults();
-                } else {
-                    notify("Stremio: system keyboard cancelled or unavailable");
                 }
                 previousButtons = readButtons(pad);
             }
@@ -1210,14 +1188,14 @@ int main() {
                     catalogPage = nextPage;
                     // New selection enters from below; the preview row itself
                     // remains stationary until it becomes the active row.
-                    catalogMotion = 180;
+                    catalogMotion = 560;
                     if (catalogPage * 4 + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
-                catalogMotion = -180;
+                catalogMotion = -560;
             }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
@@ -1228,20 +1206,12 @@ int main() {
         } else if (shellVisible && activeTab == 4) {
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 4)
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 3)
                 ++settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 2) {
                 searchQuery.clear();
                 searchShowingResults = false;
-                notify("Stremio: search query cleared");
-            } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-                settingsSelection == 3) {
-                notify("Stremio PS4 v2.30 - JavaScript-X community build");
-            } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-                settingsSelection == 4) {
-                notify("Stremio: closing safely...");
-                exitRequested = 1;
             }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
@@ -1271,14 +1241,12 @@ int main() {
             !detailVisible && !streamVisible && catalogScreen) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
-                notify("Stremio: loading metadata details...");
                 const int detailResult = fetchDetails(
                     catalogType, catalogItems[selectedIndex], details);
                 if (detailResult > 0) {
                     detailPosterIndex = selectedIndex;
                     detailEpisodeIndex = 0;
                     detailVisible = true;
-                    notify("Stremio: metadata details ready");
                 } else {
                     char failure[96];
                     snprintf(failure, sizeof(failure),
@@ -1300,13 +1268,11 @@ int main() {
             notify(selected);
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
             !streamVisible && catalogType == "publicdomain") {
-            notify("Stremio: resolving public-domain streams...");
             const int streamResult =
                 fetchPublicDomainStreams(details.id, streams);
             if (streamResult > 0) {
                 focusedStream = 0;
                 streamVisible = true;
-                notify("Stremio: stream results ready");
             } else {
                 char failure[96];
                 snprintf(failure, sizeof(failure),
@@ -1384,18 +1350,14 @@ int main() {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
             previewVisible = false;
-            notify("Stremio: playback stopped");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             avPlayer.state() != AvPlayerProbe::State::Idle) {
             avPlayer.stop();
             avPlayerProbeFrames = 0;
-            notify("Stremio: AVPlayer probe cancelled");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && streamVisible) {
             streamVisible = false;
-            notify("Stremio: returned to details");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
             detailVisible = false;
-            notify("Stremio: returned to catalog");
         }
 
         avPlayer.update();
@@ -1482,8 +1444,8 @@ int main() {
         ++frameId;
         ++animationFrame;
         if (catalogMotion != 0) {
-            catalogMotion /= 2;
-            if (catalogMotion > -2 && catalogMotion < 2) catalogMotion = 0;
+            catalogMotion = catalogMotion * 3 / 4;
+            if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
         }
 
     }

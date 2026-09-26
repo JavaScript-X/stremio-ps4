@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.30 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.40 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -47,7 +47,10 @@ with a short bottom-to-top slide instead of continuously animating every card.
 Poster compositing uses contiguous scanline copies to keep menu rendering near
 60 FPS while selected cards retain a soft rounded focus animation.
 The left analog stick mirrors D-pad navigation. Search opens the native PS4
-system keyboard and queries the canonical Cinemeta endpoint. The interface now
+system keyboard after consuming the opening Cross press, preventing that input
+from immediately closing the IME, and queries the canonical Cinemeta endpoint.
+Routine navigation no longer produces system-notification spam, and the
+unstable in-app exit command has been removed in favor of the PS4 menu. The interface now
 uses the bundled OFL-licensed Gontserrat font with anti-aliased text plus the
 official Stremio mark in the top bar. Settings contains local and cached-HTTPS
 playback diagnostics plus query reset and build information.
