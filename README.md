@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.10 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.20 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -68,6 +68,12 @@ The PS4 release objects are compiled with `-O2`; this is essential for the
 scalar NV12-to-RGB conversion loop to sustain the test video's native 24 FPS
 on the console CPU. The build check prints the active release optimization so
 an accidental unoptimized package is visible in CI and local build logs.
+System termination now stops AVPlayer before joining its frame worker, then
+closes the decoder, IME, controller, HTTP, SSL, network, and user services in a
+single orderly path. Native-style colored PS button badges replace the old
+text-only control legends in screen-corner footers.
+Settings also provides **Exit Application Safely** as an explicit way to run
+the same cleanup path before returning to the system menu.
 It does not log in, load user addons, or present decoded audio yet.
 
 Controller controls:

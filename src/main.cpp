@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstdint>
 #include <cwchar>
@@ -65,6 +66,12 @@ int networkPoolId = 0;
 int sslContextId = 0;
 int httpContextId = 0;
 PosterImage headerLogo;
+volatile sig_atomic_t exitRequested = 0;
+bool imeDialogInitialized = false;
+
+void requestExit(int) {
+    exitRequested = 1;
+}
 
 void drawBrand(Scene2D& scene, Color text) {
     if (headerLogo.valid()) {
@@ -72,6 +79,59 @@ void drawBrand(Scene2D& scene, Color text) {
             headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     }
     scene.DrawText(125, 42, "STREMIO", text, 3);
+}
+
+void drawLine(
+    Scene2D& scene, int x0, int y0, int x1, int y1, Color color,
+    int thickness = 3) {
+    const int dx = std::abs(x1 - x0);
+    const int sx = x0 < x1 ? 1 : -1;
+    const int dy = -std::abs(y1 - y0);
+    const int sy = y0 < y1 ? 1 : -1;
+    int error = dx + dy;
+    for (;;) {
+        scene.DrawRectangle(x0 - thickness / 2, y0 - thickness / 2,
+            thickness, thickness, color);
+        if (x0 == x1 && y0 == y1) break;
+        const int doubled = error * 2;
+        if (doubled >= dy) { error += dy; x0 += sx; }
+        if (doubled <= dx) { error += dx; y0 += sy; }
+    }
+}
+
+void drawButtonHint(
+    Scene2D& scene, int x, int y, char button, const char* label) {
+    const Color text = {235, 232, 244};
+    const Color blue = {86, 170, 255};
+    const Color red = {255, 105, 120};
+    const Color green = {95, 220, 145};
+    const Color pink = {235, 125, 225};
+    const Color panel = {35, 35, 46};
+    scene.DrawRoundedRectangle(x, y, 38, 38, 19, panel);
+    if (button == 'X') {
+        drawLine(scene, x + 11, y + 11, x + 27, y + 27, blue);
+        drawLine(scene, x + 27, y + 11, x + 11, y + 27, blue);
+    } else if (button == 'O') {
+        scene.DrawRoundedRectangle(x + 8, y + 8, 22, 22, 11, red);
+        scene.DrawRoundedRectangle(x + 12, y + 12, 14, 14, 7, panel);
+    } else if (button == 'S') {
+        scene.DrawRectangle(x + 9, y + 9, 20, 20, pink);
+        scene.DrawRectangle(x + 13, y + 13, 12, 12, panel);
+    } else if (button == 'T') {
+        drawLine(scene, x + 19, y + 7, x + 7, y + 29, green);
+        drawLine(scene, x + 7, y + 29, x + 31, y + 29, green);
+        drawLine(scene, x + 31, y + 29, x + 19, y + 7, green);
+    }
+    scene.DrawText(x + 50, y + 5, label, text, 2);
+}
+
+void drawShoulderHint(
+    Scene2D& scene, int x, int y, const char* button, const char* label) {
+    const Color panel = {52, 52, 68};
+    const Color text = {235, 232, 244};
+    scene.DrawRoundedRectangle(x, y, 56, 38, 10, panel);
+    scene.DrawText(x + 12, y + 5, button, text, 2);
+    scene.DrawText(x + 68, y + 5, label, text, 2);
 }
 
 std::string shortTitle(const std::string& title) {
@@ -184,13 +244,11 @@ void drawHardwareProbe(
     }
 
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
-    scene.DrawText(
-        120, 775,
-        "L1/R1 TABS   LEFT/RIGHT SELECT   UP/DOWN CONTINUOUS SCROLL",
-        mutedText, 2);
-    scene.DrawText(
-        1150, 775, "CROSS DETAILS   SQUARE LOCAL VIDEO",
-        mutedText, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
+    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
+    drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
+    drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
     char pageText[64];
     snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
         static_cast<int>(items.size()));
@@ -221,10 +279,12 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawRoundedRectangle(630 - pulse, 510 - pulse,
         660 + pulse * 2, 115 + pulse * 2, 28, purple);
     scene.DrawText(760, 548, "OPEN PS4 KEYBOARD", text, 3);
-    scene.DrawText(510, 720,
-        "PRESS CROSS TO TYPE WITH THE SYSTEM KEYBOARD", muted, 2);
-    scene.DrawText(610, 790,
-        "TRIANGLE SEARCH   CIRCLE CLEAR", muted, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
+    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
+    drawButtonHint(scene, 1170, 1020, 'O', "CLEAR / BACK");
+    drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
+    drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
 }
 
 void drawSettings(Scene2D& scene, int selected, int indicatorX) {
@@ -248,15 +308,18 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "LOCAL H.264 PLAYBACK TEST",
         "CACHED HTTPS PLAYBACK TEST",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.10"};
-    for (int index = 0; index < 4; ++index) {
-        const int y = 300 + index * 125;
+        "ABOUT STREMIO PS4  v2.20",
+        "EXIT APPLICATION SAFELY"};
+    for (int index = 0; index < 5; ++index) {
+        const int y = 270 + index * 130;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
         scene.DrawRectangle(120, y, 1680, 70, header);
         scene.DrawText(155, y + 22, rows[index], text, 2);
     }
-    scene.DrawText(120, 900,
-        "UP/DOWN SELECT   CROSS RUN   L1/R1 CHANGE TAB", muted, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
+    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
+    drawButtonHint(scene, 1640, 1020, 'X', "RUN");
 }
 
 void drawDetails(
@@ -307,12 +370,10 @@ void drawDetails(
         scene.DrawRectangle(520, 845, 1190, 60, panel);
         scene.DrawText(545, 865, episodeText, text, 2);
     }
-    scene.DrawText(
-        130, 945,
-        catalogType == "series"
-            ? "LEFT/RIGHT EPISODE   CROSS SELECT   CIRCLE BACK"
-            : "CIRCLE BACK   L1/R1 TOP TABS",
-        muted, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, panel);
+    drawButtonHint(scene, 40, 1020, 'O', "BACK");
+    if (catalogType == "series")
+        drawButtonHint(scene, 1620, 1020, 'X', "SELECT EPISODE");
 }
 
 void drawStreams(
@@ -345,9 +406,9 @@ void drawStreams(
             stream.url.empty() ? "TORRENT - COMPANION REQUIRED" : "DIRECT HTTPS",
             stream.url.empty() ? muted : text, 2);
     }
-    scene.DrawText(125, 930,
-        "UP/DOWN SELECT   CROSS PLAY/INSPECT   CIRCLE DETAILS",
-        muted, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, panel);
+    drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
+    drawButtonHint(scene, 1590, 1020, 'X', "PLAY / INSPECT");
 }
 
 void drawDecodedPreview(
@@ -394,6 +455,9 @@ void drawDecodedPreview(
         static_cast<unsigned long long>((duration / 1000) % 60),
         decoderFpsTimesTen / 10, decoderFpsTimesTen % 10);
     scene.DrawText(480, 910, clock, text, 2);
+    scene.DrawRectangle(0, 1000, kWidth, 80, background);
+    drawButtonHint(scene, 40, 1020, 'O', "STOP");
+    drawButtonHint(scene, 1610, 1020, 'X', paused ? "RESUME" : "PAUSE");
 }
 
 void notify(const char* message) {
@@ -436,15 +500,14 @@ uint32_t readButtons(int pad) {
 }
 
 bool openSystemSearchKeyboard(int userId, std::string& query) {
-    static bool initialized = false;
-    if (!initialized) {
+    if (!imeDialogInitialized) {
         if (sceSysmoduleLoadModuleInternal(
                 ORBIS_SYSMODULE_INTERNAL_COMMON_DIALOG) < 0 ||
             sceSysmoduleLoadModule(ORBIS_SYSMODULE_IME_DIALOG) < 0) {
             return false;
         }
         sceCommonDialogInitialize();
-        initialized = true;
+        imeDialogInitialized = true;
     }
 
     // The PS4 IME ABI uses UTF-16 even though this target's wchar_t is 32-bit.
@@ -492,9 +555,14 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
     if (sceImeDialogInit(&settings, nullptr) < 0) return false;
 
     OrbisDialogStatus status = sceImeDialogGetStatus();
-    while (status == ORBIS_DIALOG_STATUS_RUNNING) {
+    while (status == ORBIS_DIALOG_STATUS_RUNNING && !exitRequested) {
         sceKernelUsleep(16000);
         status = sceImeDialogGetStatus();
+    }
+    if (exitRequested) {
+        sceImeDialogAbort();
+        sceImeDialogTerm();
+        return false;
     }
     OrbisDialogResult result = {};
     const bool accepted = status == ORBIS_DIALOG_STATUS_STOPPED &&
@@ -783,8 +851,10 @@ int appendCatalogPage(
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
+    signal(SIGTERM, requestExit);
+    signal(SIGINT, requestExit);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 2.10: fast catalog UI and centered keyboard");
+    notify("Stremio 2.20: graceful shutdown and button badges");
 
     int userId = -1;
     const int pad = initializeController(userId);
@@ -948,7 +1018,7 @@ int main() {
     }
     loadActiveCatalog();
 
-    for (;;) {
+    while (!exitRequested) {
         const uint32_t buttons = readButtons(pad);
         const uint32_t pressed = buttons & ~previousButtons;
         previousButtons = buttons;
@@ -1039,7 +1109,7 @@ int main() {
         } else if (shellVisible && activeTab == 4) {
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 3)
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 4)
                 ++settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 2) {
@@ -1048,7 +1118,11 @@ int main() {
                 notify("Stremio: search query cleared");
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 3) {
-                notify("Stremio PS4 v2.10 - JavaScript-X community build");
+                notify("Stremio PS4 v2.20 - JavaScript-X community build");
+            } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                settingsSelection == 4) {
+                notify("Stremio: closing safely...");
+                exitRequested = 1;
             }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
@@ -1294,4 +1368,29 @@ int main() {
         }
 
     }
+
+    DEBUGLOG << "Stremio graceful shutdown starting";
+    avPlayer.stop();
+    if (imeDialogInitialized &&
+        sceImeDialogGetStatus() == ORBIS_DIALOG_STATUS_RUNNING) {
+        sceImeDialogAbort();
+        sceImeDialogTerm();
+    }
+    if (pad >= 0) scePadClose(pad);
+    if (httpContextId > 0) {
+        sceHttpTerm(httpContextId);
+        httpContextId = 0;
+    }
+    if (sslContextId > 0) {
+        sceSslTerm();
+        sslContextId = 0;
+    }
+    if (networkPoolId > 0) {
+        sceNetPoolDestroy(networkPoolId);
+        networkPoolId = 0;
+        sceNetTerm();
+    }
+    sceUserServiceTerminate();
+    DEBUGLOG << "Stremio graceful shutdown complete";
+    return 0;
 }

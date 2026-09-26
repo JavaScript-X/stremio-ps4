@@ -240,6 +240,7 @@ void AvPlayerProbe::decoderLoop() {
             sceKernelUsleep(1000);
             continue;
         }
+        if (stopDecoderThread_) break;
         const uint32_t frameWidth = frame.details.video.width;
         const uint32_t frameHeight = frame.details.video.height;
         const uint32_t pitch = frame.details.video.pitch > 0
@@ -294,11 +295,14 @@ void AvPlayerProbe::decoderLoop() {
 void AvPlayerProbe::stop() {
     if (handle_) {
         stopDecoderThread_ = true;
+        // Stop first so a frame pull blocked while the app is backgrounded is
+        // released. The worker checks the stop flag before touching frame data;
+        // close still happens only after the worker has joined.
+        sceAvPlayerStop(handle_);
         if (decoderThreadRunning_) {
             pthread_join(decoderThread_, nullptr);
             decoderThreadRunning_ = false;
         }
-        sceAvPlayerStop(handle_);
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
     }
