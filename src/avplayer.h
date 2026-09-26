@@ -135,7 +135,7 @@ public:
 
     AvPlayerProbe();
     ~AvPlayerProbe();
-    bool start(const char* url);
+    bool start(const char* url, bool renderPreview = true);
     void update();
     void stop();
     void togglePause();
@@ -165,6 +165,7 @@ private:
     uint32_t height_ = 0;
     bool started_ = false;
     bool paused_ = false;
+    bool renderPreview_ = true;
     std::vector<uint32_t> preview_;
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;

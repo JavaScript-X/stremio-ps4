@@ -102,7 +102,7 @@ AvPlayerProbe::~AvPlayerProbe() {
     pthread_mutex_destroy(&previewMutex_);
 }
 
-bool AvPlayerProbe::start(const char* url) {
+bool AvPlayerProbe::start(const char* url, bool renderPreview) {
     stop();
     errorStage_ = 0;
     errorCode_ = 0;
@@ -120,6 +120,7 @@ bool AvPlayerProbe::start(const char* url) {
     stopDecoderThread_ = false;
     started_ = false;
     paused_ = false;
+    renderPreview_ = renderPreview;
     latestPlayerEvent = 0;
 
     if (!initializeTexturePool()) {
@@ -258,35 +259,39 @@ void AvPlayerProbe::decoderLoop() {
         const uint32_t pitch = frame.details.video.pitch > 0
             ? frame.details.video.pitch
             : frameWidth;
-        // AVPlayer always hardware-decodes the full source. Bound only the CPU
-        // NV12-to-RGB diagnostic surface to roughly 320x180 so conversion cost
-        // is constant across 360p, 480p, 720p, and 1080p sources. The previous
-        // half-size rule converted 230,400 pixels for 720p versus 57,600 for
-        // 360p, making the preview loop—not the hardware decoder—the FPS limit.
-        uint32_t sampleStep = (frameWidth + 319) / 320;
-        if (sampleStep < 2) sampleStep = 2;
-        const uint32_t outputWidth = frameWidth / sampleStep;
-        const uint32_t outputHeight = frameHeight / sampleStep;
-        converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
+        uint32_t outputWidth = 0;
+        uint32_t outputHeight = 0;
+        if (renderPreview_) {
+            // AVPlayer always hardware-decodes the full source. Bound only the
+            // CPU diagnostic surface so every quality has comparable cost.
+            uint32_t sampleStep = (frameWidth + 319) / 320;
+            if (sampleStep < 2) sampleStep = 2;
+            outputWidth = frameWidth / sampleStep;
+            outputHeight = frameHeight / sampleStep;
+            converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
 
-        const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
-        const uint8_t* chroma = luma + static_cast<size_t>(pitch) * frameHeight;
-        for (uint32_t py = 0; py < outputHeight; ++py) {
-            const uint32_t y = py * sampleStep;
-            for (uint32_t px = 0; px < outputWidth; ++px) {
-                const uint32_t x = px * sampleStep;
-                const int yy = luma[static_cast<size_t>(y) * pitch + x] - 16;
-                const uint32_t chromaX = x & ~1u;
-                const size_t uv = static_cast<size_t>(y / 2) * pitch + chromaX;
-                const int u = chroma[uv] - 128;
-                const int v = chroma[uv + 1] - 128;
-                const int r = (298 * yy + 409 * v + 128) >> 8;
-                const int g = (298 * yy - 100 * u - 208 * v + 128) >> 8;
-                const int b = (298 * yy + 516 * u + 128) >> 8;
-                converted[static_cast<size_t>(py) * outputWidth + px] =
-                    (static_cast<uint32_t>(clampColor(r)) << 16) |
-                    (static_cast<uint32_t>(clampColor(g)) << 8) |
-                    clampColor(b);
+            const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
+            const uint8_t* chroma = luma +
+                static_cast<size_t>(pitch) * frameHeight;
+            for (uint32_t py = 0; py < outputHeight; ++py) {
+                const uint32_t y = py * sampleStep;
+                for (uint32_t px = 0; px < outputWidth; ++px) {
+                    const uint32_t x = px * sampleStep;
+                    const int yy =
+                        luma[static_cast<size_t>(y) * pitch + x] - 16;
+                    const uint32_t chromaX = x & ~1u;
+                    const size_t uv =
+                        static_cast<size_t>(y / 2) * pitch + chromaX;
+                    const int u = chroma[uv] - 128;
+                    const int v = chroma[uv + 1] - 128;
+                    const int r = (298 * yy + 409 * v + 128) >> 8;
+                    const int g = (298 * yy - 100 * u - 208 * v + 128) >> 8;
+                    const int b = (298 * yy + 516 * u + 128) >> 8;
+                    converted[static_cast<size_t>(py) * outputWidth + px] =
+                        (static_cast<uint32_t>(clampColor(r)) << 16) |
+                        (static_cast<uint32_t>(clampColor(g)) << 8) |
+                        clampColor(b);
+                }
             }
         }
         pthread_mutex_lock(&previewMutex_);
@@ -294,7 +299,7 @@ void AvPlayerProbe::decoderLoop() {
         height_ = frameHeight;
         previewWidth_ = outputWidth;
         previewHeight_ = outputHeight;
-        preview_.swap(converted);
+        if (renderPreview_) preview_.swap(converted);
         ++decodedFrames_;
         ++fpsWindowFrames_;
         const uint64_t now = sceKernelGetProcessTime();

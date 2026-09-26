@@ -1,5 +1,5 @@
 TITLE      := Stremio
-VERSION    := 2.64
+VERSION    := 2.70
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -19,6 +19,7 @@ TEST_VIDEO_720 := assets/sintel-720p.mp4
 TEST_VIDEO_1080 := assets/sintel-1080p.mp4
 UI_FONT    := assets/Gontserrat-Regular.ttf
 UI_LOGO    := assets/branding/stremio-official.png
+CREATOR_AVATAR := assets/branding/javascript-x-avatar.png
 
 CC         := clang-18
 CXX        := clang++-18
@@ -67,6 +68,7 @@ check:
 	@test -f "$(TEST_VIDEO_1080)" || (echo "1080p test video missing"; exit 1)
 	@test -f "$(UI_FONT)" || (echo "UI font not found: $(UI_FONT)"; exit 1)
 	@test -f "$(UI_LOGO)" || (echo "Stremio logo not found: $(UI_LOGO)"; exit 1)
+	@test -f "$(CREATOR_AVATAR)" || (echo "Creator avatar missing"; exit 1)
 
 $(BUILDDIR) $(DISTDIR) $(BUILDDIR)/sce_sys/about $(BUILDDIR)/sce_module:
 	mkdir -p $@
@@ -129,6 +131,10 @@ $(BUILDDIR)/assets/stremio-official.png: $(UI_LOGO)
 	mkdir -p $(BUILDDIR)/assets
 	cp $< $@
 
+$(BUILDDIR)/assets/javascript-x-avatar.png: $(CREATOR_AVATAR)
+	mkdir -p $(BUILDDIR)/assets
+	cp $< $@
+
 $(BUILDDIR)/sce_sys/param.sfo: Makefile | $(BUILDDIR)/sce_sys/about
 	$(TOOLS)/PkgTool.Core sfo_new $@
 	$(TOOLS)/PkgTool.Core sfo_setentry $@ APP_TYPE --type Integer --maxsize 4 --value 1
@@ -150,10 +156,11 @@ $(BUILDDIR)/pkg.gp4: $(BUILDDIR)/eboot.bin $(BUILDDIR)/sce_sys/about/right.sprx 
 	$(BUILDDIR)/assets/sintel-720p.mp4 \
 	$(BUILDDIR)/assets/sintel-1080p.mp4 \
 	$(BUILDDIR)/assets/Gontserrat-Regular.ttf \
-	$(BUILDDIR)/assets/stremio-official.png
+	$(BUILDDIR)/assets/stremio-official.png \
+	$(BUILDDIR)/assets/javascript-x-avatar.png
 	cd $(BUILDDIR) && $(TOOLS)/create-gp4 -out pkg.gp4 \
 		--content-id=$(CONTENT_ID) \
-		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx assets/sintel-trailer.mp4 assets/sintel-360p.mp4 assets/sintel-720p.mp4 assets/sintel-1080p.mp4 assets/Gontserrat-Regular.ttf assets/stremio-official.png"
+		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx assets/sintel-trailer.mp4 assets/sintel-360p.mp4 assets/sintel-720p.mp4 assets/sintel-1080p.mp4 assets/Gontserrat-Regular.ttf assets/stremio-official.png assets/javascript-x-avatar.png"
 
 $(PACKAGE): $(BUILDDIR)/pkg.gp4 | $(DISTDIR)
 	$(TOOLS)/PkgTool.Core pkg_build $< $(DISTDIR)

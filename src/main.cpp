@@ -46,10 +46,10 @@ constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
 constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
 const char* const kVideoTestPaths[] = {
     "/app0/assets/sintel-360p.mp4",
+    kLegalVideoPath,
     "/app0/assets/sintel-720p.mp4",
-    "/app0/assets/sintel-1080p.mp4",
-    kLegalVideoPath};
-const char* const kVideoTestNames[] = {"360P", "720P", "1080P", "854X480"};
+    "/app0/assets/sintel-1080p.mp4"};
+const char* const kVideoTestNames[] = {"360P", "854X480", "720P", "1080P"};
 constexpr const char* kCatalogBaseUrl =
     "https://cinemeta-catalogs.strem.io/top/catalog/";
 constexpr const char* kMetaBaseUrl = "https://v3-cinemeta.strem.io/meta/";
@@ -73,6 +73,7 @@ int networkPoolId = 0;
 int sslContextId = 0;
 int httpContextId = 0;
 PosterImage headerLogo;
+PosterImage creatorAvatar;
 volatile sig_atomic_t exitRequested = 0;
 bool imeDialogInitialized = false;
 
@@ -330,11 +331,10 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
 }
 
-void drawSettings(Scene2D& scene, int selected, int indicatorX) {
+void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
     const Color purple = {123, 91, 214};
-    const Color focus = {196, 174, 255};
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
@@ -346,16 +346,16 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             index == 4 ? text : muted, 2);
     }
     scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
-    scene.DrawText(120, 190, "SETTINGS & DIAGNOSTICS", text, 3);
-    const char* rows[] = {
-        "H.264 PLAYBACK TEST - 640x360",
-        "H.264 PLAYBACK TEST - 1280x720",
-        "H.264 PLAYBACK TEST - 1920x1080",
-        "H.264 PLAYBACK TEST - ORIGINAL 854x480",
-        "CACHED HTTPS PLAYBACK TEST - 854x480",
-        "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.64"};
-    for (int index = 0; index < 7; ++index) {
+    scene.DrawText(120, 190, title, text, 3);
+}
+
+void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
+    int selected, int indicatorX, const char* title, const char* action) {
+    const Color header = {29, 29, 39};
+    const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    drawSettingsHeader(scene, indicatorX, title);
+    for (int index = 0; index < rowCount; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
         scene.DrawRectangle(120, y, 1680, 70, header);
@@ -364,7 +364,69 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
-    drawButtonHint(scene, 1640, 1020, 'X', "RUN");
+    drawButtonHint(scene, 1390, 1020, 'O', "BACK");
+    drawButtonHint(scene, 1640, 1020, 'X', action);
+}
+
+void drawSettings(Scene2D& scene, int selected, int indicatorX) {
+    const char* rows[] = {
+        "PLAYBACK TESTS",
+        "CLEAR SEARCH QUERY",
+        "ABOUT STREMIO  v2.70"};
+    drawSettingsRows(scene, rows, 3, selected, indicatorX,
+        "SETTINGS", "OPEN");
+}
+
+void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
+    const char* rows[] = {
+        "SONY AVPLAYER + RGB PREVIEW",
+        "SONY AVPLAYER DECODE-ONLY"};
+    drawSettingsRows(scene, rows, 2, selected, indicatorX,
+        "PLAYBACK TESTS / PLAYER MODE", "SELECT");
+}
+
+void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
+    bool decodeOnly) {
+    const char* rows[] = {
+        "LOCAL H.264  640x360",
+        "LOCAL H.264  854x480",
+        "LOCAL H.264  1280x720",
+        "LOCAL H.264  1920x1080",
+        "CACHED HTTPS H.264  854x480"};
+    drawSettingsRows(scene, rows, 5, selected, indicatorX,
+        decodeOnly ? "DECODE-ONLY / SELECT QUALITY" :
+            "RGB PREVIEW / SELECT QUALITY", "RUN");
+}
+
+void drawAbout(Scene2D& scene, int indicatorX) {
+    const Color panel = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    drawSettingsHeader(scene, indicatorX, "ABOUT STREMIO FOR PS4");
+    scene.DrawRoundedRectangle(120, 270, 1680, 610, 30, panel);
+    scene.DrawRoundedRectangle(165, 320, 330, 330, 36, purple);
+    if (creatorAvatar.valid()) {
+        scene.BlitRgbScaledRounded(180, 335, 300, 300, 34,
+            creatorAvatar.pixels.data(), creatorAvatar.width,
+            creatorAvatar.height);
+    }
+    scene.DrawText(560, 315, "TAHAR CHTIOUI", text, 4);
+    scene.DrawText(560, 380, "GITHUB  @JAVASCRIPT-X", purple, 3);
+    scene.DrawText(560, 455,
+        "CREATOR, DEVELOPER AND REAL-HARDWARE TESTER", text, 2);
+    scene.DrawText(560, 510,
+        "A COMMUNITY HOMEBREW CLIENT BUILT FOR JAILBROKEN PS4", muted, 2);
+    scene.DrawText(560, 565,
+        "TEST PLATFORM  PS4 FIRMWARE 13.02 + GOLDHEN", muted, 2);
+    scene.DrawText(560, 640,
+        "GITHUB.COM/JAVASCRIPT-X/STREMIO-PS4", text, 2);
+    scene.DrawText(560, 705,
+        "STREMIO IS A TRADEMARK OF ITS RESPECTIVE OWNER.", muted, 2);
+    scene.DrawText(560, 750,
+        "THIS PROJECT IS INDEPENDENT AND OPEN SOURCE.", muted, 2);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 230);
+    drawButtonHint(scene, 1640, 1020, 'O', "BACK");
 }
 
 void drawDetails(
@@ -468,7 +530,8 @@ void drawDecodedPreview(
     uint32_t decoderFpsTimesTen,
     uint64_t decodedFrames,
     uint32_t sourceWidth,
-    uint32_t sourceHeight) {
+    uint32_t sourceHeight,
+    bool decodeOnly) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
     const Color track = {45, 45, 58};
@@ -483,7 +546,15 @@ void drawDecodedPreview(
         scene.DrawRectangle(startX - 8, startY - 8, width + 16, height + 16, border);
     }
 
-    scene.BlitRgb(startX, startY, width, height, pixels.data());
+    if (!decodeOnly) {
+        scene.BlitRgb(startX, startY, width, height, pixels.data());
+    } else {
+        scene.DrawRoundedRectangle(560, 300, 800, 360, 30, track);
+        scene.DrawText(700, 390, "SONY AVPLAYER", border, 4);
+        scene.DrawText(675, 480, "HARDWARE DECODE-ONLY TEST", text, 3);
+        scene.DrawText(650, 555,
+            "RGB CONVERSION AND VIDEO BLIT DISABLED", border, 2);
+    }
     const int timelineX = 480;
     const int timelineWidth = 960;
     scene.DrawRectangle(420, 835, 1080, 125, background);
@@ -1095,6 +1166,10 @@ int main() {
     int catalogMotion = 0;
     int searchKey = 0;
     int settingsSelection = 0;
+    int settingsPage = 0;
+    bool playbackDecodeOnly = false;
+    bool activePlaybackDecodeOnly = false;
+    int queuedPlaybackTest = -1;
     bool searchShowingResults = false;
     std::string searchQuery;
     bool detailVisible = false;
@@ -1107,6 +1182,8 @@ int main() {
     scene.SetActiveFrameBuffer(0);
     loadBundledImage(
         "/app0/assets/stremio-official.png", 96, 96, headerLogo);
+    loadBundledImage(
+        "/app0/assets/javascript-x-avatar.png", 300, 300, creatorAvatar);
 
     CatalogLoadJob catalogJobs[3];
     CatalogPageJob pageJob;
@@ -1271,6 +1348,8 @@ int main() {
         if (nextTab == activeTab) return;
         if (activeCatalogDataTab >= 0) storeActiveCatalog();
         activeTab = nextTab;
+        settingsPage = 0;
+        settingsSelection = 0;
         detailVisible = false;
         streamVisible = false;
         if (activeTab < 3) activateCatalog(activeTab, false);
@@ -1439,14 +1518,34 @@ int main() {
                 catalogPosters.clear();
             }
         } else if (shellVisible && activeTab == 4) {
+            const int maximumSelection = settingsPage == 0 ? 2 :
+                (settingsPage == 1 ? 1 : (settingsPage == 2 ? 4 : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 6)
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
+                settingsSelection < maximumSelection)
                 ++settingsSelection;
-            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-                settingsSelection == 5) {
-                searchQuery.clear();
-                searchShowingResults = false;
+            if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && settingsPage != 0) {
+                settingsPage = settingsPage == 2 ? 1 : 0;
+                settingsSelection = 0;
+            } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
+                if (settingsPage == 0 && settingsSelection == 0) {
+                    settingsPage = 1;
+                    settingsSelection = 0;
+                } else if (settingsPage == 0 && settingsSelection == 1) {
+                    searchQuery.clear();
+                    searchShowingResults = false;
+                    notify("Stremio: search query cleared");
+                } else if (settingsPage == 0 && settingsSelection == 2) {
+                    settingsPage = 3;
+                    settingsSelection = 0;
+                } else if (settingsPage == 1) {
+                    playbackDecodeOnly = settingsSelection == 1;
+                    settingsPage = 2;
+                    settingsSelection = 0;
+                } else if (settingsPage == 2) {
+                    queuedPlaybackTest = settingsSelection;
+                }
             }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
@@ -1537,8 +1636,7 @@ int main() {
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
-            (shellVisible && activeTab == 4 && settingsSelection <= 3 &&
-             (pressed & ORBIS_PAD_BUTTON_CROSS) != 0);
+            (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 3);
         if (localPlaybackRequested) {
             stopBackgroundForPlayback();
             previewVisible = false;
@@ -1547,14 +1645,18 @@ int main() {
             playbackTimingReported = false;
             playbackSourceWidth = 0;
             playbackSourceHeight = 0;
-            const int testIndex = activeTab == 4 ? settingsSelection : 3;
+            const int testIndex = queuedPlaybackTest >= 0
+                ? queuedPlaybackTest : 1;
             char opening[96];
             snprintf(opening, sizeof(opening),
                 "Stremio test: opening Sintel %s H.264",
                 kVideoTestNames[testIndex]);
             notify(opening);
             avPlayerProbeFrames = 0;
-            if (!avPlayer.start(kVideoTestPaths[testIndex])) {
+            activePlaybackDecodeOnly = queuedPlaybackTest >= 0 &&
+                playbackDecodeOnly;
+            const bool renderPreview = !activePlaybackDecodeOnly;
+            if (!avPlayer.start(kVideoTestPaths[testIndex], renderPreview)) {
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: AVPlayer stage %d, code 0x%08x",
@@ -1562,10 +1664,9 @@ int main() {
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
             }
+            queuedPlaybackTest = -1;
         }
-        const bool remotePlaybackRequested = shellVisible && activeTab == 4 &&
-            settingsSelection == 4 &&
-            (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+        const bool remotePlaybackRequested = queuedPlaybackTest == 4;
         if (remotePlaybackRequested) {
             stopBackgroundForPlayback();
             previewVisible = false;
@@ -1575,6 +1676,7 @@ int main() {
             playbackSourceWidth = 0;
             playbackSourceHeight = 0;
             avPlayerProbeFrames = 0;
+            activePlaybackDecodeOnly = playbackDecodeOnly;
             notify("Stremio: checking verified remote trailer cache...");
             bool reused = false;
             const int cacheResult = cacheLegalRemoteTrailer(reused);
@@ -1589,7 +1691,8 @@ int main() {
                     ? "Stremio: using cached HTTPS trailer"
                     : "Stremio: HTTPS trailer downloaded and cached");
             }
-            if (cacheResult >= 0 && !avPlayer.start(kLegalRemoteCachePath)) {
+            if (cacheResult >= 0 && !avPlayer.start(
+                    kLegalRemoteCachePath, !activePlaybackDecodeOnly)) {
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: cached AVPlayer stage %d, code 0x%08x",
@@ -1597,6 +1700,7 @@ int main() {
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
             }
+            queuedPlaybackTest = -1;
         }
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
             avPlayer.stop();
@@ -1656,7 +1760,8 @@ int main() {
                 previewBackgroundFrames > 0, avPlayer.currentTime(),
                 avPlayer.duration(), avPlayer.paused(),
                 avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames(),
-                playbackSourceWidth, playbackSourceHeight);
+                playbackSourceWidth, playbackSourceHeight,
+                activePlaybackDecodeOnly);
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }
@@ -1688,7 +1793,16 @@ int main() {
             drawSearch(scene, searchQuery, searchKey, indicatorX,
                 animationFrame);
         } else if (activeTab == 4) {
-            drawSettings(scene, settingsSelection, indicatorX);
+            if (settingsPage == 1) {
+                drawPlayerSelection(scene, settingsSelection, indicatorX);
+            } else if (settingsPage == 2) {
+                drawQualitySelection(scene, settingsSelection, indicatorX,
+                    playbackDecodeOnly);
+            } else if (settingsPage == 3) {
+                drawAbout(scene, indicatorX);
+            } else {
+                drawSettings(scene, settingsSelection, indicatorX);
+            }
         } else {
             drawHardwareProbe(
                 scene, focusedCard, catalogPage, catalogType, catalogStatus,
