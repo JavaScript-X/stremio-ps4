@@ -297,7 +297,7 @@ void drawHardwareProbe(
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
 }
 
-void drawSearch(Scene2D& scene, const std::string& query, int enterAssignment,
+void drawSearch(Scene2D& scene, const std::string& query, int,
     int indicatorX, int) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
@@ -320,11 +320,8 @@ void drawSearch(Scene2D& scene, const std::string& query, int enterAssignment,
     scene.DrawText(270, 455,
         "PRESS CROSS TO TYPE WITH THE PS4 KEYBOARD", muted, 2);
     scene.DrawText(270, 500,
-        enterAssignment == ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS
-            ? "SYSTEM ENTER BUTTON: CROSS"
-            : "SYSTEM ENTER BUTTON: CIRCLE - CHANGE IN PS4 SYSTEM SETTINGS",
-        enterAssignment == ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS
-            ? text : purple, 2);
+        "CROSS TYPE   SQUARE DELETE   TRIANGLE SPACE   R2 SEARCH   CIRCLE CLOSE",
+        text, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
@@ -357,7 +354,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "H.264 PLAYBACK TEST - ORIGINAL 854x480",
         "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.60"};
+        "ABOUT STREMIO PS4  v2.61"};
     for (int index = 0; index < 7; ++index) {
         const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -601,10 +598,10 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
         't','i','t','l','e',0};
     OrbisImeDialogSetting settings = {};
     settings.userId = static_cast<uint32_t>(userId);
-    // Basic Latin/default action keeps character selection on the console's
-    // standard Enter button instead of treating Cross as the Search action.
-    settings.type = ORBIS_TYPE_BASIC_LATIN;
-    settings.enterLabel = ORBIS_BUTTON_LABEL_DEFAULT;
+    // Use Sony's standard search-dialog configuration. The system keyboard
+    // owns Cross/Square/Triangle/R2/Circle while this blocking dialog runs.
+    settings.type = ORBIS_TYPE_DEFAULT;
+    settings.enterLabel = ORBIS_BUTTON_LABEL_SEARCH;
     settings.inputMethod = ORBIS__DEFAULT;
     settings.maxTextLength = 64;
     settings.inputTextBuffer = reinterpret_cast<wchar_t*>(buffer);
@@ -1094,9 +1091,7 @@ int main() {
     int indicatorX = 350;
     int animationFrame = 0;
     int catalogMotion = 0;
-    int searchKey = ORBIS_SYSTEM_PARAM_ENTER_BUTTON_ASSIGN_CROSS;
-    sceSystemServiceParamGetInt(
-        ORBIS_SYSTEM_SERVICE_PARAM_ID_ENTER_BUTTON_ASSIGN, &searchKey);
+    int searchKey = 0;
     int settingsSelection = 0;
     bool searchShowingResults = false;
     std::string searchQuery;
@@ -1138,6 +1133,28 @@ int main() {
         if (pthread_create(&pageJob.thread, nullptr,
                 catalogPageEntry, &pageJob) != 0) {
             pageJob.running.store(false, std::memory_order_release);
+        }
+    };
+
+    auto stopBackgroundForPlayback = [&]() {
+        const bool pageRunning = pageJob.running.load(std::memory_order_acquire);
+        if (pageRunning) pthread_cancel(pageJob.thread);
+        if (pageRunning || pageJob.completed.load(std::memory_order_acquire))
+            pthread_join(pageJob.thread, nullptr);
+        pageJob.running.store(false, std::memory_order_release);
+        pageJob.completed.store(false, std::memory_order_release);
+        pageJob.items.clear();
+        pageJob.posters.clear();
+        for (int index = 0; index < 3; ++index) {
+            CatalogLoadJob& job = catalogJobs[index];
+            if (!job.running.load(std::memory_order_acquire)) continue;
+            pthread_cancel(job.thread);
+            pthread_join(job.thread, nullptr);
+            job.running.store(false, std::memory_order_release);
+            job.completed.store(false, std::memory_order_release);
+            job.itemsReady.store(false, std::memory_order_release);
+            job.postersProcessed.store(0, std::memory_order_release);
+            job.loaded = false;
         }
     };
 
@@ -1512,6 +1529,7 @@ int main() {
             (shellVisible && activeTab == 4 && settingsSelection <= 3 &&
              (pressed & ORBIS_PAD_BUTTON_CROSS) != 0);
         if (localPlaybackRequested) {
+            stopBackgroundForPlayback();
             previewVisible = false;
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
@@ -1536,6 +1554,7 @@ int main() {
             settingsSelection == 4 &&
             (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
         if (remotePlaybackRequested) {
+            stopBackgroundForPlayback();
             previewVisible = false;
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
