@@ -258,10 +258,13 @@ void AvPlayerProbe::decoderLoop() {
         const uint32_t pitch = frame.details.video.pitch > 0
             ? frame.details.video.pitch
             : frameWidth;
-        // Full-HD NV12-to-RGB at half size still converts 518k pixels/frame on
-        // the CPU and limited the probe to ~15 FPS. Keep hardware decode at
-        // 1920x1080, but sample its debug/presentation surface to 480x270.
-        const uint32_t sampleStep = frameWidth > 1280 ? 4 : 2;
+        // AVPlayer always hardware-decodes the full source. Bound only the CPU
+        // NV12-to-RGB diagnostic surface to roughly 320x180 so conversion cost
+        // is constant across 360p, 480p, 720p, and 1080p sources. The previous
+        // half-size rule converted 230,400 pixels for 720p versus 57,600 for
+        // 360p, making the preview loop—not the hardware decoder—the FPS limit.
+        uint32_t sampleStep = (frameWidth + 319) / 320;
+        if (sampleStep < 2) sampleStep = 2;
         const uint32_t outputWidth = frameWidth / sampleStep;
         const uint32_t outputHeight = frameHeight / sampleStep;
         converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
