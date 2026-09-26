@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.40 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.50 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -65,6 +65,12 @@ certificate-verified HTTPS client into persistent app storage and then feeds
 that local cache to AVPlayer. The first run downloads the 4.37 MB trailer and
 later runs reuse it. Playback now includes a native progress bar, elapsed/total
 clock, visible playing/paused state, and a live measured decoder-FPS counter.
+Packaged 360p, 720p, 1080p, and original-resolution Sintel variants provide
+repeatable hardware-decoder comparisons. The player supports five-second
+back/forward seeking and restart, and displays source resolution plus decoded
+frame count. Catalog, metadata, and encoded poster responses persist in
+`/data`; uncached posters are published individually instead of holding the
+whole catalog until every image finishes.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

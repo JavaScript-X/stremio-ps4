@@ -168,6 +168,35 @@ void Scene2D::DrawRectangle(int x, int y, int width, int height, Color color) {
     }
 }
 
+void Scene2D::DrawVerticalFade(
+    int x, int y, int width, int height, Color color,
+    uint8_t topOpacity, uint8_t bottomOpacity) {
+    if (width <= 0 || height <= 0) return;
+    const int left = std::max(0, x);
+    const int right = std::min(width_, x + width);
+    const int top = std::max(0, y);
+    const int bottom = std::min(height_, y + height);
+    if (left >= right || top >= bottom) return;
+    uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
+    for (int row = top; row < bottom; ++row) {
+        const int localY = row - y;
+        const uint32_t opacity = topOpacity +
+            (static_cast<int>(bottomOpacity) - topOpacity) * localY /
+                std::max(1, height - 1);
+        const uint32_t inverse = 255 - opacity;
+        for (int column = left; column < right; ++column) {
+            uint32_t& destination = buffer[static_cast<size_t>(row) * width_ + column];
+            const uint32_t r = (color.r * opacity +
+                ((destination >> 16) & 255) * inverse) / 255;
+            const uint32_t g = (color.g * opacity +
+                ((destination >> 8) & 255) * inverse) / 255;
+            const uint32_t b = (color.b * opacity +
+                (destination & 255) * inverse) / 255;
+            destination = 0x80000000u | (r << 16) | (g << 8) | b;
+        }
+    }
+}
+
 void Scene2D::DrawRoundedRectangle(
     int x, int y, int width, int height, int radius, Color color) {
     const int left = std::max(0, x);

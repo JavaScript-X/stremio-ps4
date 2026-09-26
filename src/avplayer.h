@@ -124,6 +124,7 @@ int32_t sceAvPlayerStart(SceAvPlayerHandle handle);
 int32_t sceAvPlayerPause(SceAvPlayerHandle handle);
 int32_t sceAvPlayerResume(SceAvPlayerHandle handle);
 uint64_t sceAvPlayerCurrentTime(SceAvPlayerHandle handle);
+int32_t sceAvPlayerJumpToTime(SceAvPlayerHandle handle, uint64_t time);
 int32_t sceAvPlayerStop(SceAvPlayerHandle handle);
 
 }  // extern "C"
@@ -138,6 +139,8 @@ public:
     void update();
     void stop();
     void togglePause();
+    bool seekRelative(int64_t milliseconds);
+    bool restart();
 
     State state() const { return state_; }
     int errorStage() const { return errorStage_; }

@@ -44,6 +44,12 @@ constexpr size_t kVideoMemory = 0xC000000;
 constexpr int kNetworkPoolSize = 64 * 1024;
 constexpr uint32_t kHttpTimeoutUsec = 8 * 1000 * 1000;
 constexpr const char* kLegalVideoPath = "/app0/assets/sintel-trailer.mp4";
+const char* const kVideoTestPaths[] = {
+    "/app0/assets/sintel-360p.mp4",
+    "/app0/assets/sintel-720p.mp4",
+    "/app0/assets/sintel-1080p.mp4",
+    kLegalVideoPath};
+const char* const kVideoTestNames[] = {"360P", "720P", "1080P", "854X480"};
 constexpr const char* kCatalogBaseUrl =
     "https://cinemeta-catalogs.strem.io/top/catalog/";
 constexpr const char* kMetaBaseUrl = "https://v3-cinemeta.strem.io/meta/";
@@ -187,7 +193,7 @@ void drawHardwareProbe(
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
     drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
@@ -208,37 +214,46 @@ void drawHardwareProbe(
     const int cardX[] = {120, 565, 1010, 1455};
     const int cardY = 260 + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
-                              bool showTitles) {
+                              bool showTitles, int scalePercent) {
         if (rowPage < 0 || rowY >= 1000 || rowY + 460 <= 145) return;
+        const int cardWidth = 310 * scalePercent / 100;
+        const int cardHeight = 410 * scalePercent / 100;
         for (int index = 0; index < 4; ++index) {
         const int itemIndex = rowPage * 4 + index;
+        const int x = cardX[index] + (310 - cardWidth) / 2;
         if (selected && index == focusedCard) {
             const int pulse = (animationFrame / 8) % 2;
-            scene.DrawRoundedRectangle(cardX[index] - 8 - pulse,
+            scene.DrawRoundedRectangle(x - 8 - pulse,
                 rowY - 8 - pulse,
-                326 + pulse * 2, 426 + pulse * 2, 22, focus);
+                cardWidth + 16 + pulse * 2,
+                cardHeight + 16 + pulse * 2, 22, focus);
         }
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
-        if (posterReady) {
-            scene.BlitRgbMasked(cardX[index], rowY, posters[itemIndex].width,
+        if (posterReady && scalePercent == 100) {
+            scene.BlitRgbMasked(x, rowY, posters[itemIndex].width,
                 posters[itemIndex].height, posters[itemIndex].pixels.data());
+        } else if (posterReady) {
+            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 16,
+                posters[itemIndex].pixels.data(), posters[itemIndex].width,
+                posters[itemIndex].height);
         } else {
-            scene.DrawRoundedRectangle(cardX[index], rowY, 310, 410, 18,
+            scene.DrawRoundedRectangle(x, rowY, cardWidth, cardHeight, 18,
                 stremioPurple);
-            scene.DrawRoundedRectangle(cardX[index] + 95, rowY + 142,
-                120, 120, 28, cardMuted);
+            const int logoSize = 96 * scalePercent / 100;
+            const int logoX = x + (cardWidth - logoSize) / 2;
+            const int logoY = rowY + (cardHeight - logoSize) / 2;
+            scene.DrawRoundedRectangle(logoX - 12, logoY - 12,
+                logoSize + 24, logoSize + 24, 28, cardMuted);
             if (headerLogo.valid() && rowY >= 0 && rowY + 410 <= kHeight) {
-                scene.BlitRgbScaledRounded(cardX[index] + 107, rowY + 154,
-                    96, 96, 20, headerLogo.pixels.data(), headerLogo.width,
-                    headerLogo.height);
+                scene.BlitRgbScaledRounded(logoX, logoY,
+                    logoSize, logoSize, 20, headerLogo.pixels.data(),
+                    headerLogo.width, headerLogo.height);
             }
-            scene.DrawText(cardX[index] + 85, rowY + 292,
-                "LOADING", text, 2);
         }
         if (showTitles && itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
-            scene.DrawText(cardX[index], rowY + 430, title.c_str(), text, 2);
+            scene.DrawText(x, rowY + cardHeight + 20, title.c_str(), text, 2);
         }
         }
     };
@@ -246,20 +261,22 @@ void drawHardwareProbe(
     // During paging, preserve the old row and move it out while the exact
     // cards that were visible below move into the selected position.
     if (catalogMotion > 0)
-        drawCatalogRow(page - 1, cardY - 560, false, true);
+        drawCatalogRow(page - 1, cardY - 560, false, true, 100);
     else if (catalogMotion < 0)
-        drawCatalogRow(page + 1, cardY + 560, false, true);
-    drawCatalogRow(page, cardY, true, true);
+        drawCatalogRow(page + 1, cardY + 560, false, true, 100);
+    const int selectedScale = catalogMotion > 0
+        ? 90 + (560 - catalogMotion) * 10 / 560 : 100;
+    drawCatalogRow(page, cardY, true, true, selectedScale);
 
     const int nextPage = page + 1;
     // The next row stays still. Movement belongs to page selection, not an
     // always-running animation that consumes GPU time and looks like jumping.
     const int previewY = 820 + (catalogMotion > 0 ? catalogMotion : 0);
     if (catalogMotion >= 0)
-        drawCatalogRow(nextPage, previewY, false, false);
+        drawCatalogRow(nextPage, previewY, false, false, 90);
 
     scene.DrawText(120, 740, status.c_str(), mutedText, 2);
-    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
@@ -278,7 +295,7 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
     drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
@@ -292,7 +309,7 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawText(270, 335, shown.c_str(), query.empty() ? muted : text, 3);
     scene.DrawText(270, 455,
         "PRESS CROSS TO TYPE WITH THE PS4 KEYBOARD", muted, 2);
-    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1170, 1020, 'O', "CLEAR / BACK");
@@ -308,7 +325,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawRectangle(0, 0, kWidth, 145, header);
+    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
     drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
@@ -318,17 +335,20 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
     scene.DrawText(120, 190, "SETTINGS & DIAGNOSTICS", text, 3);
     const char* rows[] = {
-        "LOCAL H.264 PLAYBACK TEST",
-        "CACHED HTTPS PLAYBACK TEST",
+        "H.264 PLAYBACK TEST - 640x360",
+        "H.264 PLAYBACK TEST - 1280x720",
+        "H.264 PLAYBACK TEST - 1920x1080",
+        "H.264 PLAYBACK TEST - ORIGINAL 854x480",
+        "CACHED HTTPS PLAYBACK TEST - 854x480",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.40"};
-    for (int index = 0; index < 4; ++index) {
-        const int y = 270 + index * 130;
+        "ABOUT STREMIO PS4  v2.50"};
+    for (int index = 0; index < 7; ++index) {
+        const int y = 220 + index * 105;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
         scene.DrawRectangle(120, y, 1680, 70, header);
         scene.DrawText(155, y + 22, rows[index], text, 2);
     }
-    scene.DrawRectangle(0, 1000, kWidth, 80, header);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1640, 1020, 'X', "RUN");
@@ -432,7 +452,8 @@ void drawDecodedPreview(
     uint64_t currentTime,
     uint64_t duration,
     bool paused,
-    uint32_t decoderFpsTimesTen) {
+    uint32_t decoderFpsTimesTen,
+    uint64_t decodedFrames) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
     const Color track = {45, 45, 58};
@@ -467,8 +488,17 @@ void drawDecodedPreview(
         static_cast<unsigned long long>((duration / 1000) % 60),
         decoderFpsTimesTen / 10, decoderFpsTimesTen % 10);
     scene.DrawText(480, 910, clock, text, 2);
+    char debug[128];
+    snprintf(debug, sizeof(debug),
+        "SOURCE %ux%u   FRAMES %llu   SEEK STEP 5s   HW AVPLAYER",
+        previewWidth * 2, previewHeight * 2,
+        static_cast<unsigned long long>(decodedFrames));
+    scene.DrawText(480, 945, debug, text, 2);
     scene.DrawRectangle(0, 1000, kWidth, 80, background);
     drawButtonHint(scene, 40, 1020, 'O', "STOP");
+    drawButtonHint(scene, 250, 1020, '<', "-5 SEC");
+    drawButtonHint(scene, 500, 1020, '>', "+5 SEC");
+    drawButtonHint(scene, 760, 1020, 'T', "RESTART");
     drawButtonHint(scene, 1610, 1020, 'X', paused ? "RESUME" : "PAUSE");
 }
 
@@ -553,8 +583,10 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
         't','i','t','l','e',0};
     OrbisImeDialogSetting settings = {};
     settings.userId = static_cast<uint32_t>(userId);
-    settings.type = ORBIS_TYPE_DEFAULT;
-    settings.enterLabel = ORBIS_BUTTON_LABEL_SEARCH;
+    // Basic Latin/default action keeps character selection on the console's
+    // standard Enter button instead of treating Cross as the Search action.
+    settings.type = ORBIS_TYPE_BASIC_LATIN;
+    settings.enterLabel = ORBIS_BUTTON_LABEL_DEFAULT;
     settings.inputMethod = ORBIS__DEFAULT;
     settings.maxTextLength = 64;
     settings.inputTextBuffer = reinterpret_cast<wchar_t*>(buffer);
@@ -751,6 +783,48 @@ std::string urlEncode(const std::string& value) {
     return encoded;
 }
 
+uint64_t stableHash(const std::string& value) {
+    uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char byte : value) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::string cachePath(const char* kind, const std::string& key,
+                      const char* extension) {
+    char path[160];
+    snprintf(path, sizeof(path), "/data/stremio-%s-%016llx.%s", kind,
+        static_cast<unsigned long long>(stableHash(key)), extension);
+    return path;
+}
+
+bool readCachedFile(const std::string& path, size_t maximum,
+                    std::string& contents) {
+    FILE* file = fopen(path.c_str(), "rb");
+    if (!file) return false;
+    fseek(file, 0, SEEK_END);
+    const long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    if (size <= 0 || static_cast<size_t>(size) > maximum) {
+        fclose(file);
+        return false;
+    }
+    contents.resize(static_cast<size_t>(size));
+    const bool okay = fread(&contents[0], 1, contents.size(), file) ==
+        contents.size();
+    fclose(file);
+    return okay;
+}
+
+void writeCachedFile(const std::string& path, const std::string& contents) {
+    FILE* file = fopen(path.c_str(), "wb");
+    if (!file) return;
+    fwrite(contents.data(), 1, contents.size(), file);
+    fclose(file);
+}
+
 int fetchCatalogPage(
     const std::string& catalogType,
     int skip,
@@ -775,8 +849,14 @@ int fetchCatalogPage(
     }
     if (searchQuery.empty()) url += ".json";
     std::string body;
-    const int bytes =
-        downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+    const std::string stored = cachePath("catalog", url, "json");
+    int bytes = 0;
+    if (!readCachedFile(stored, kMaximumCatalogBytes, body)) {
+        bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+        if (bytes >= 0) writeCachedFile(stored, body);
+    } else {
+        bytes = static_cast<int>(body.size());
+    }
     if (bytes < 0) return bytes;
     return parseCatalogItems(body, items, kCatalogBatchSize)
         ? static_cast<int>(items.size()) : -8;
@@ -804,7 +884,14 @@ int fetchDetails(
     const std::string url = std::string(kMetaBaseUrl) + resourceType + "/" +
         item.id + ".json";
     std::string body;
-    const int bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+    const std::string stored = cachePath("meta", url, "json");
+    int bytes = 0;
+    if (!readCachedFile(stored, kMaximumCatalogBytes, body)) {
+        bytes = downloadUrl(url.c_str(), kMaximumCatalogBytes, body);
+        if (bytes >= 0) writeCachedFile(stored, body);
+    } else {
+        bytes = static_cast<int>(body.size());
+    }
     if (bytes < 0) return bytes;
     return parseMetaDetails(body, details) ? 1 : -8;
 }
@@ -834,10 +921,15 @@ int fetchPosters(
         posterUrl += posterUrl.find('?') == std::string::npos
             ? "?format=jpg" : "&format=jpg";
         std::string encoded;
-        if (downloadUrl(
-                posterUrl.c_str(), kMaximumPosterBytes, encoded) >= 0 &&
+        const std::string stored = cachePath("poster", posterUrl, "jpg");
+        const bool cached = readCachedFile(
+            stored, kMaximumPosterBytes, encoded);
+        int bytes = cached ? static_cast<int>(encoded.size())
+            : downloadUrl(posterUrl.c_str(), kMaximumPosterBytes, encoded);
+        if (bytes >= 0 &&
             decodePosterJpeg(
                 encoded, kPosterWidth, kPosterHeight, posters[index])) {
+            if (!cached) writeCachedFile(stored, encoded);
             preparePosterPresentation(posters[index], 18, 220, 290);
             ++loaded;
         }
@@ -864,6 +956,8 @@ struct CatalogLoadJob {
     pthread_t thread = {};
     std::atomic<bool> running{false};
     std::atomic<bool> completed{false};
+    std::atomic<bool> itemsReady{false};
+    std::atomic<int> postersProcessed{0};
     bool loaded = false;
     int result = 0;
     int posterCount = 0;
@@ -878,15 +972,27 @@ void* catalogLoadEntry(void* argument) {
     job->items.clear();
     job->posters.clear();
     job->posterCount = 0;
+    job->itemsReady.store(false, std::memory_order_release);
+    job->postersProcessed.store(0, std::memory_order_release);
     job->result = fetchCatalogPage(job->type, 0, "", job->items);
     if (job->result > 0) {
-        job->posterCount = fetchPosters(job->items, job->posters);
-        const size_t firstBatch = job->posters.size();
-        const int preloaded = appendCatalogPage(
-            job->type, job->items, job->posters);
-        if (preloaded > 0) {
-            for (size_t index = firstBatch; index < job->posters.size(); ++index)
-                if (job->posters[index].valid()) ++job->posterCount;
+        std::vector<CatalogItem> nextItems;
+        if (fetchCatalogPage(job->type,
+                static_cast<int>(job->items.size()), "", nextItems) > 0) {
+            job->items.insert(job->items.end(), nextItems.begin(), nextItems.end());
+        }
+        job->posters.clear();
+        job->posters.resize(job->items.size());
+        job->itemsReady.store(true, std::memory_order_release);
+        for (size_t index = 0; index < job->items.size(); ++index) {
+            std::vector<CatalogItem> oneItem(1, job->items[index]);
+            std::vector<PosterImage> onePoster;
+            if (fetchPosters(oneItem, onePoster) > 0 && !onePoster.empty()) {
+                job->posters[index] = std::move(onePoster[0]);
+                ++job->posterCount;
+            }
+            job->postersProcessed.store(
+                static_cast<int>(index + 1), std::memory_order_release);
         }
         char text[128];
         snprintf(text, sizeof(text), "%d ITEMS   %d POSTERS   PRELOADED",
@@ -968,6 +1074,7 @@ int main() {
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
     int activeCatalogDataTab = -1;
+    int displayedPosterCount = 0;
 
     auto storeActiveCatalog = [&]() {
         if (activeCatalogDataTab < 0 || activeCatalogDataTab >= 3) return;
@@ -986,6 +1093,7 @@ int main() {
         cache.status.swap(catalogStatus);
         cache.loaded = !cache.items.empty();
         activeCatalogDataTab = -1;
+        displayedPosterCount = 0;
     };
 
     auto startCatalogLoad = [&](int tab, bool force) {
@@ -1000,6 +1108,8 @@ int main() {
                 return false;
         }
         job.loaded = false;
+        job.itemsReady.store(false, std::memory_order_release);
+        job.postersProcessed.store(0, std::memory_order_release);
         job.completed.store(false, std::memory_order_release);
         job.running.store(true, std::memory_order_release);
         if (pthread_create(&job.thread, nullptr, catalogLoadEntry, &job) != 0) {
@@ -1033,6 +1143,7 @@ int main() {
             startCatalogLoad(tab, force);
         }
         activeCatalogDataTab = tab;
+        displayedPosterCount = 0;
         focusedCard = 0;
         catalogPage = 0;
         detailVisible = false;
@@ -1095,6 +1206,22 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (activeTab < 3 && activeCatalogDataTab == activeTab) {
+            CatalogLoadJob& activeJob = catalogJobs[activeTab];
+            if (activeJob.itemsReady.load(std::memory_order_acquire) &&
+                catalogItems.empty()) {
+                catalogItems = activeJob.items;
+                catalogPosters.resize(catalogItems.size());
+            }
+            const int ready = activeJob.postersProcessed.load(
+                std::memory_order_acquire);
+            while (displayedPosterCount < ready &&
+                displayedPosterCount < static_cast<int>(catalogPosters.size())) {
+                catalogPosters[displayedPosterCount] =
+                    activeJob.posters[displayedPosterCount];
+                ++displayedPosterCount;
+            }
+        }
         // Adopt completed content only on the main/render thread. Other tabs
         // retain their completed vectors as an instant in-memory cache.
         for (int index = 0; index < 3; ++index) {
@@ -1206,10 +1333,10 @@ int main() {
         } else if (shellVisible && activeTab == 4) {
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 3)
+            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && settingsSelection < 6)
                 ++settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-                settingsSelection == 2) {
+                settingsSelection == 5) {
                 searchQuery.clear();
                 searchShowingResults = false;
             }
@@ -1237,6 +1364,12 @@ int main() {
             notify(avPlayer.paused()
                 ? "Stremio: playback paused"
                 : "Stremio: playback resumed");
+        } else if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && previewVisible) {
+            avPlayer.seekRelative(-5000);
+        } else if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && previewVisible) {
+            avPlayer.seekRelative(5000);
+        } else if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0 && previewVisible) {
+            avPlayer.restart();
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
             !detailVisible && !streamVisible && catalogScreen) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
@@ -1296,16 +1429,21 @@ int main() {
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
-            (shellVisible && activeTab == 4 && settingsSelection == 0 &&
+            (shellVisible && activeTab == 4 && settingsSelection <= 3 &&
              (pressed & ORBIS_PAD_BUTTON_CROSS) != 0);
         if (localPlaybackRequested) {
             previewVisible = false;
             previewBackgroundFrames = 0;
             playbackWallStart = 0;
             playbackTimingReported = false;
-            notify("Stremio: opening packaged Sintel H.264 trailer...");
+            const int testIndex = activeTab == 4 ? settingsSelection : 3;
+            char opening[96];
+            snprintf(opening, sizeof(opening),
+                "Stremio test: opening Sintel %s H.264",
+                kVideoTestNames[testIndex]);
+            notify(opening);
             avPlayerProbeFrames = 0;
-            if (!avPlayer.start(kLegalVideoPath)) {
+            if (!avPlayer.start(kVideoTestPaths[testIndex])) {
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: AVPlayer stage %d, code 0x%08x",
@@ -1315,7 +1453,7 @@ int main() {
             }
         }
         const bool remotePlaybackRequested = shellVisible && activeTab == 4 &&
-            settingsSelection == 1 &&
+            settingsSelection == 4 &&
             (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
         if (remotePlaybackRequested) {
             previewVisible = false;
@@ -1399,7 +1537,7 @@ int main() {
                 scene, previewPixels, previewWidth, previewHeight,
                 previewBackgroundFrames > 0, avPlayer.currentTime(),
                 avPlayer.duration(), avPlayer.paused(),
-                avPlayer.measuredFpsTimesTen());
+                avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames());
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }

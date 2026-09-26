@@ -324,6 +324,21 @@ void AvPlayerProbe::togglePause() {
     }
 }
 
+bool AvPlayerProbe::seekRelative(int64_t milliseconds) {
+    if (!handle_ || !started_) return false;
+    const int64_t now = static_cast<int64_t>(sceAvPlayerCurrentTime(handle_));
+    int64_t target = now + milliseconds;
+    if (target < 0) target = 0;
+    if (duration_ > 0 && static_cast<uint64_t>(target) > duration_)
+        target = static_cast<int64_t>(duration_);
+    return sceAvPlayerJumpToTime(handle_, static_cast<uint64_t>(target)) >= 0;
+}
+
+bool AvPlayerProbe::restart() {
+    if (!handle_ || !started_) return false;
+    return sceAvPlayerJumpToTime(handle_, 0) >= 0;
+}
+
 uint64_t AvPlayerProbe::currentTime() const {
     return handle_ ? sceAvPlayerCurrentTime(handle_) : 0;
 }

@@ -1,5 +1,5 @@
 TITLE      := Stremio
-VERSION    := 2.40
+VERSION    := 2.50
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -14,6 +14,9 @@ ICON0      := assets/branding/icon0.png
 LIBC_PRX   ?= $(TOOLCHAIN)/samples/graphics/sce_module/libc.prx
 FIOS2_PRX  ?= $(TOOLCHAIN)/samples/graphics/sce_module/libSceFios2.prx
 TEST_VIDEO := assets/sintel-trailer.mp4
+TEST_VIDEO_360 := assets/sintel-360p.mp4
+TEST_VIDEO_720 := assets/sintel-720p.mp4
+TEST_VIDEO_1080 := assets/sintel-1080p.mp4
 UI_FONT    := assets/Gontserrat-Regular.ttf
 UI_LOGO    := assets/branding/stremio-official.png
 
@@ -59,6 +62,9 @@ check:
 	@test -f "$(LIBC_PRX)" || (echo "libc.prx not found; set LIBC_PRX"; exit 1)
 	@test -f "$(FIOS2_PRX)" || (echo "libSceFios2.prx not found; set FIOS2_PRX"; exit 1)
 	@test -f "$(TEST_VIDEO)" || (echo "CC0 test video not found: $(TEST_VIDEO)"; exit 1)
+	@test -f "$(TEST_VIDEO_360)" || (echo "360p test video missing"; exit 1)
+	@test -f "$(TEST_VIDEO_720)" || (echo "720p test video missing"; exit 1)
+	@test -f "$(TEST_VIDEO_1080)" || (echo "1080p test video missing"; exit 1)
 	@test -f "$(UI_FONT)" || (echo "UI font not found: $(UI_FONT)"; exit 1)
 	@test -f "$(UI_LOGO)" || (echo "Stremio logo not found: $(UI_LOGO)"; exit 1)
 
@@ -103,6 +109,18 @@ $(BUILDDIR)/assets/sintel-trailer.mp4: $(TEST_VIDEO)
 	mkdir -p $(BUILDDIR)/assets
 	cp $< $@
 
+$(BUILDDIR)/assets/sintel-360p.mp4: $(TEST_VIDEO_360)
+	mkdir -p $(BUILDDIR)/assets
+	cp $< $@
+
+$(BUILDDIR)/assets/sintel-720p.mp4: $(TEST_VIDEO_720)
+	mkdir -p $(BUILDDIR)/assets
+	cp $< $@
+
+$(BUILDDIR)/assets/sintel-1080p.mp4: $(TEST_VIDEO_1080)
+	mkdir -p $(BUILDDIR)/assets
+	cp $< $@
+
 $(BUILDDIR)/assets/Gontserrat-Regular.ttf: $(UI_FONT)
 	mkdir -p $(BUILDDIR)/assets
 	cp $< $@
@@ -128,11 +146,14 @@ $(BUILDDIR)/pkg.gp4: $(BUILDDIR)/eboot.bin $(BUILDDIR)/sce_sys/about/right.sprx 
 	$(BUILDDIR)/sce_sys/icon0.png $(BUILDDIR)/sce_sys/param.sfo \
 	$(BUILDDIR)/sce_module/libc.prx $(BUILDDIR)/sce_module/libSceFios2.prx \
 	$(BUILDDIR)/assets/sintel-trailer.mp4 \
+	$(BUILDDIR)/assets/sintel-360p.mp4 \
+	$(BUILDDIR)/assets/sintel-720p.mp4 \
+	$(BUILDDIR)/assets/sintel-1080p.mp4 \
 	$(BUILDDIR)/assets/Gontserrat-Regular.ttf \
 	$(BUILDDIR)/assets/stremio-official.png
 	cd $(BUILDDIR) && $(TOOLS)/create-gp4 -out pkg.gp4 \
 		--content-id=$(CONTENT_ID) \
-		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx assets/sintel-trailer.mp4 assets/Gontserrat-Regular.ttf assets/stremio-official.png"
+		--files "eboot.bin sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx assets/sintel-trailer.mp4 assets/sintel-360p.mp4 assets/sintel-720p.mp4 assets/sintel-1080p.mp4 assets/Gontserrat-Regular.ttf assets/stremio-official.png"
 
 $(PACKAGE): $(BUILDDIR)/pkg.gp4 | $(DISTDIR)
 	$(TOOLS)/PkgTool.Core pkg_build $< $(DISTDIR)

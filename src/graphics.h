@@ -26,6 +26,8 @@ public:
     void FrameBufferFill(Color color);
     void DrawPixel(int x, int y, Color color);
     void DrawRectangle(int x, int y, int width, int height, Color color);
+    void DrawVerticalFade(int x, int y, int width, int height, Color color,
+        uint8_t topOpacity, uint8_t bottomOpacity);
     void DrawRoundedRectangle(
         int x, int y, int width, int height, int radius, Color color);
     void BlitRgb(int x, int y, int width, int height, const uint32_t* pixels);
