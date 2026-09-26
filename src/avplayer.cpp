@@ -102,7 +102,8 @@ AvPlayerProbe::~AvPlayerProbe() {
     pthread_mutex_destroy(&previewMutex_);
 }
 
-bool AvPlayerProbe::start(const char* url, bool renderPreview) {
+bool AvPlayerProbe::start(
+    const char* url, bool renderPreview, bool legacyFrameApi) {
     stop();
     errorStage_ = 0;
     errorCode_ = 0;
@@ -121,6 +122,7 @@ bool AvPlayerProbe::start(const char* url, bool renderPreview) {
     started_ = false;
     paused_ = false;
     renderPreview_ = renderPreview;
+    legacyFrameApi_ = legacyFrameApi;
     latestPlayerEvent = 0;
 
     if (!initializeTexturePool()) {
@@ -143,10 +145,12 @@ bool AvPlayerProbe::start(const char* url, bool renderPreview) {
     init.memoryReplacement.allocateTexture = allocateTexture;
     init.memoryReplacement.deallocateTexture = releaseTexture;
     init.eventReplacement.eventCallback = playerEvent;
-    init.basePriority = 160;
+    // The legacy experiment uses a higher-priority worker and deeper queue to
+    // test whether the extended CPU frame-export path limits 1080p delivery.
+    init.basePriority = legacyFrameApi_ ? 128 : 160;
     // Six buffers give the hardware decoder enough room to run ahead while
     // the CPU converts the previous NV12 frame for the native framebuffer.
-    init.numOutputVideoFrameBuffers = 6;
+    init.numOutputVideoFrameBuffers = legacyFrameApi_ ? 12 : 6;
     init.autoStart = 0;
     init.defaultLanguage = "en";
 
@@ -249,16 +253,33 @@ void AvPlayerProbe::decoderLoop() {
         }
 
         SceAvPlayerFrameInfoEx frame = {};
-        if (!sceAvPlayerGetVideoDataEx(handle_, &frame) || !frame.pData) {
-            sceKernelUsleep(1000);
-            continue;
+        SceAvPlayerFrameInfo legacyFrame = {};
+        void* frameData = nullptr;
+        uint32_t frameWidth = 0;
+        uint32_t frameHeight = 0;
+        uint32_t pitch = 0;
+        if (legacyFrameApi_) {
+            if (!sceAvPlayerGetVideoData(handle_, &legacyFrame) ||
+                !legacyFrame.pData) {
+                sceKernelUsleep(1000);
+                continue;
+            }
+            frameData = legacyFrame.pData;
+            frameWidth = legacyFrame.details.video.width;
+            frameHeight = legacyFrame.details.video.height;
+            pitch = frameWidth;
+        } else {
+            if (!sceAvPlayerGetVideoDataEx(handle_, &frame) || !frame.pData) {
+                sceKernelUsleep(1000);
+                continue;
+            }
+            frameData = frame.pData;
+            frameWidth = frame.details.video.width;
+            frameHeight = frame.details.video.height;
+            pitch = frame.details.video.pitch > 0
+                ? frame.details.video.pitch : frameWidth;
         }
         if (stopDecoderThread_) break;
-        const uint32_t frameWidth = frame.details.video.width;
-        const uint32_t frameHeight = frame.details.video.height;
-        const uint32_t pitch = frame.details.video.pitch > 0
-            ? frame.details.video.pitch
-            : frameWidth;
         uint32_t outputWidth = 0;
         uint32_t outputHeight = 0;
         if (renderPreview_) {
@@ -270,7 +291,7 @@ void AvPlayerProbe::decoderLoop() {
             outputHeight = frameHeight / sampleStep;
             converted.resize(static_cast<size_t>(outputWidth) * outputHeight);
 
-            const uint8_t* luma = static_cast<const uint8_t*>(frame.pData);
+            const uint8_t* luma = static_cast<const uint8_t*>(frameData);
             const uint8_t* chroma = luma +
                 static_cast<size_t>(pitch) * frameHeight;
             for (uint32_t py = 0; py < outputHeight; ++py) {

@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.71 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.72 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -110,6 +110,10 @@ Version 2.71 adds a second true-24-FPS 1080p probe encoded as H.264 High Profile
 Level 4.1 at a lower bitrate. It remains alongside the Constrained Baseline
 Level 4.0 source, allowing real PS4 hardware to determine whether the 15 FPS
 frame-delivery cap is caused by the original stream profile rather than UI work.
+Version 2.72 adds an experimental Sony AVPlayer performance mode using the
+legacy frame API, a higher-priority AVPlayer worker, and twelve output buffers.
+It is decode-only until hardware testing proves that its 1080p frame delivery
+is faster and stable enough to become the basis of a visible renderer.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

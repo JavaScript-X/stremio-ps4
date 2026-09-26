@@ -374,7 +374,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.70"};
+        "ABOUT STREMIO  v2.72"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -382,13 +382,14 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
 void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "SONY AVPLAYER + RGB PREVIEW",
-        "SONY AVPLAYER DECODE-ONLY"};
-    drawSettingsRows(scene, rows, 2, selected, indicatorX,
+        "SONY AVPLAYER DECODE-ONLY",
+        "SONY AVPLAYER PERFORMANCE / LEGACY API"};
+    drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "PLAYBACK TESTS / PLAYER MODE", "SELECT");
 }
 
 void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
-    bool decodeOnly) {
+    bool decodeOnly, bool legacyApi) {
     const char* rows[] = {
         "LOCAL H.264  640x360",
         "LOCAL H.264  854x480",
@@ -397,8 +398,9 @@ void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
         "LOCAL H.264  1920x1080 HIGH L4.1",
         "CACHED HTTPS H.264  854x480"};
     drawSettingsRows(scene, rows, 6, selected, indicatorX,
-        decodeOnly ? "DECODE-ONLY / SELECT QUALITY" :
-            "RGB PREVIEW / SELECT QUALITY", "RUN");
+        legacyApi ? "PERFORMANCE LEGACY API / SELECT QUALITY" :
+        (decodeOnly ? "DECODE-ONLY / SELECT QUALITY" :
+            "RGB PREVIEW / SELECT QUALITY"), "RUN");
 }
 
 void drawAbout(Scene2D& scene, int indicatorX) {
@@ -534,7 +536,8 @@ void drawDecodedPreview(
     uint64_t decodedFrames,
     uint32_t sourceWidth,
     uint32_t sourceHeight,
-    bool decodeOnly) {
+    bool decodeOnly,
+    bool legacyApi) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
     const Color track = {45, 45, 58};
@@ -554,7 +557,9 @@ void drawDecodedPreview(
     } else {
         scene.DrawRoundedRectangle(560, 300, 800, 360, 30, track);
         scene.DrawText(700, 390, "SONY AVPLAYER", border, 4);
-        scene.DrawText(675, 480, "HARDWARE DECODE-ONLY TEST", text, 3);
+        scene.DrawText(675, 480, legacyApi ?
+            "LEGACY HARDWARE FRAME API" : "HARDWARE DECODE-ONLY TEST",
+            text, 3);
         scene.DrawText(650, 555,
             "RGB CONVERSION AND VIDEO BLIT DISABLED", border, 2);
     }
@@ -1171,7 +1176,9 @@ int main() {
     int settingsSelection = 0;
     int settingsPage = 0;
     bool playbackDecodeOnly = false;
+    bool playbackLegacyApi = false;
     bool activePlaybackDecodeOnly = false;
+    bool activePlaybackLegacyApi = false;
     int queuedPlaybackTest = -1;
     bool searchShowingResults = false;
     std::string searchQuery;
@@ -1522,7 +1529,7 @@ int main() {
             }
         } else if (shellVisible && activeTab == 4) {
             const int maximumSelection = settingsPage == 0 ? 2 :
-                (settingsPage == 1 ? 1 : (settingsPage == 2 ? 5 : 0));
+                (settingsPage == 1 ? 2 : (settingsPage == 2 ? 5 : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
                 --settingsSelection;
             if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 &&
@@ -1543,7 +1550,8 @@ int main() {
                     settingsPage = 3;
                     settingsSelection = 0;
                 } else if (settingsPage == 1) {
-                    playbackDecodeOnly = settingsSelection == 1;
+                    playbackDecodeOnly = settingsSelection != 0;
+                    playbackLegacyApi = settingsSelection == 2;
                     settingsPage = 2;
                     settingsSelection = 0;
                 } else if (settingsPage == 2) {
@@ -1658,8 +1666,11 @@ int main() {
             avPlayerProbeFrames = 0;
             activePlaybackDecodeOnly = queuedPlaybackTest >= 0 &&
                 playbackDecodeOnly;
+            activePlaybackLegacyApi = queuedPlaybackTest >= 0 &&
+                playbackLegacyApi;
             const bool renderPreview = !activePlaybackDecodeOnly;
-            if (!avPlayer.start(kVideoTestPaths[testIndex], renderPreview)) {
+            if (!avPlayer.start(kVideoTestPaths[testIndex], renderPreview,
+                    activePlaybackLegacyApi)) {
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: AVPlayer stage %d, code 0x%08x",
@@ -1680,6 +1691,7 @@ int main() {
             playbackSourceHeight = 0;
             avPlayerProbeFrames = 0;
             activePlaybackDecodeOnly = playbackDecodeOnly;
+            activePlaybackLegacyApi = playbackLegacyApi;
             notify("Stremio: checking verified remote trailer cache...");
             bool reused = false;
             const int cacheResult = cacheLegalRemoteTrailer(reused);
@@ -1695,7 +1707,8 @@ int main() {
                     : "Stremio: HTTPS trailer downloaded and cached");
             }
             if (cacheResult >= 0 && !avPlayer.start(
-                    kLegalRemoteCachePath, !activePlaybackDecodeOnly)) {
+                    kLegalRemoteCachePath, !activePlaybackDecodeOnly,
+                    activePlaybackLegacyApi)) {
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: cached AVPlayer stage %d, code 0x%08x",
@@ -1764,7 +1777,7 @@ int main() {
                 avPlayer.duration(), avPlayer.paused(),
                 avPlayer.measuredFpsTimesTen(), avPlayer.decodedFrames(),
                 playbackSourceWidth, playbackSourceHeight,
-                activePlaybackDecodeOnly);
+                activePlaybackDecodeOnly, activePlaybackLegacyApi);
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }
@@ -1800,7 +1813,7 @@ int main() {
                 drawPlayerSelection(scene, settingsSelection, indicatorX);
             } else if (settingsPage == 2) {
                 drawQualitySelection(scene, settingsSelection, indicatorX,
-                    playbackDecodeOnly);
+                    playbackDecodeOnly, playbackLegacyApi);
             } else if (settingsPage == 3) {
                 drawAbout(scene, indicatorX);
             } else {
