@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <csignal>
@@ -215,12 +216,23 @@ void drawHardwareProbe(
                 cardY - 8 - pulse,
                 326 + pulse * 2, 426 + pulse * 2, 22, focus);
         }
-        scene.DrawRoundedRectangle(cardX[index], cardY, 310, 410, 18,
-            itemIndex < static_cast<int>(items.size()) ? card : cardMuted);
-        if (itemIndex < static_cast<int>(posters.size()) &&
-            posters[itemIndex].valid()) {
+        const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
+            posters[itemIndex].valid();
+        if (posterReady) {
             scene.BlitRgbMasked(cardX[index], cardY, posters[itemIndex].width,
                 posters[itemIndex].height, posters[itemIndex].pixels.data());
+        } else {
+            scene.DrawRoundedRectangle(cardX[index], cardY, 310, 410, 18,
+                stremioPurple);
+            scene.DrawRoundedRectangle(cardX[index] + 95, cardY + 142,
+                120, 120, 28, cardMuted);
+            if (headerLogo.valid()) {
+                scene.BlitRgbScaledRounded(cardX[index] + 107, cardY + 154,
+                    96, 96, 20, headerLogo.pixels.data(), headerLogo.width,
+                    headerLogo.height);
+            }
+            scene.DrawText(cardX[index] + 85, cardY + 292,
+                "LOADING", text, 2);
         }
         if (itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
@@ -229,17 +241,26 @@ void drawHardwareProbe(
     }
 
     const int nextPage = page + 1;
-    const int previewY = 820 + static_cast<int>(8.0 *
-        std::sin(static_cast<double>(animationFrame) * 0.06));
+    // The next row stays still. Movement belongs to page selection, not an
+    // always-running animation that consumes GPU time and looks like jumping.
+    constexpr int previewY = 820;
     for (int index = 0; index < 4; ++index) {
         const int itemIndex = nextPage * 4 + index;
         const int x = 170 + index * 430;
-        scene.DrawRoundedRectangle(x, previewY, 220, 290, 16, cardMuted);
-        if (itemIndex < static_cast<int>(posters.size()) &&
-            posters[itemIndex].previewValid()) {
+        const bool previewReady = itemIndex < static_cast<int>(posters.size()) &&
+            posters[itemIndex].previewValid();
+        if (previewReady) {
             scene.BlitRgb(x, previewY, posters[itemIndex].previewWidth,
                 posters[itemIndex].previewHeight,
                 posters[itemIndex].previewPixels.data());
+        } else {
+            scene.DrawRoundedRectangle(x, previewY, 220, 290, 16,
+                stremioPurple);
+            if (headerLogo.valid()) {
+                scene.BlitRgbScaledRounded(x + 74, previewY + 97, 72, 72, 16,
+                    headerLogo.pixels.data(), headerLogo.width,
+                    headerLogo.height);
+            }
         }
     }
 
@@ -308,7 +329,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "LOCAL H.264 PLAYBACK TEST",
         "CACHED HTTPS PLAYBACK TEST",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v2.20",
+        "ABOUT STREMIO PS4  v2.30",
         "EXIT APPLICATION SAFELY"};
     for (int index = 0; index < 5; ++index) {
         const int y = 270 + index * 130;
@@ -847,6 +868,47 @@ int appendCatalogPage(
     posters.insert(posters.end(), nextPosters.begin(), nextPosters.end());
     return result;
 }
+
+struct CatalogLoadJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    bool loaded = false;
+    int result = 0;
+    int posterCount = 0;
+    std::string type;
+    std::string status;
+    std::vector<CatalogItem> items;
+    std::vector<PosterImage> posters;
+};
+
+void* catalogLoadEntry(void* argument) {
+    CatalogLoadJob* job = static_cast<CatalogLoadJob*>(argument);
+    job->items.clear();
+    job->posters.clear();
+    job->posterCount = 0;
+    job->result = fetchCatalogPage(job->type, 0, "", job->items);
+    if (job->result > 0) {
+        job->posterCount = fetchPosters(job->items, job->posters);
+        const size_t firstBatch = job->posters.size();
+        const int preloaded = appendCatalogPage(
+            job->type, job->items, job->posters);
+        if (preloaded > 0) {
+            for (size_t index = firstBatch; index < job->posters.size(); ++index)
+                if (job->posters[index].valid()) ++job->posterCount;
+        }
+        char text[128];
+        snprintf(text, sizeof(text), "%d ITEMS   %d POSTERS   PRELOADED",
+            static_cast<int>(job->items.size()), job->posterCount);
+        job->status = text;
+    } else {
+        job->status = "CATALOG LOAD FAILED - PRESS TRIANGLE TO RETRY";
+    }
+    job->loaded = job->result > 0;
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
 }  // namespace
 
 int main() {
@@ -854,7 +916,7 @@ int main() {
     signal(SIGTERM, requestExit);
     signal(SIGINT, requestExit);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 2.20: graceful shutdown and button badges");
+    notify("Stremio 2.30: instant catalogs and smooth scrolling");
 
     int userId = -1;
     const int pad = initializeController(userId);
@@ -915,48 +977,81 @@ int main() {
     loadBundledImage(
         "/app0/assets/stremio-official.png", 96, 96, headerLogo);
 
-    auto loadActiveCatalog = [&]() {
-        char loading[96];
-        snprintf(loading, sizeof(loading), "Stremio: loading top %s...",
-            catalogType == "series" ? "series" : "movies");
-        notify(loading);
-        catalogStatus = "LOADING CINEMETA...";
-        catalogPosters.clear();
-        const int catalogResult = fetchCatalogPage(
-            catalogType, 0, "", catalogItems);
-        char result[192];
-        if (catalogResult > 0) {
-            int posterCount = fetchPosters(catalogItems, catalogPosters);
-            const size_t beforePreload = catalogPosters.size();
-            const int preloaded = appendCatalogPage(
-                catalogType, catalogItems, catalogPosters);
-            if (preloaded > 0) {
-                for (size_t index = beforePreload;
-                     index < catalogPosters.size(); ++index) {
-                    if (catalogPosters[index].valid()) ++posterCount;
-                }
-            }
-            snprintf(result, sizeof(result),
-                "Stremio: loaded %d cards and %d posters",
-                static_cast<int>(catalogItems.size()), posterCount);
-            char visibleStatus[128];
-            snprintf(visibleStatus, sizeof(visibleStatus),
-                "%d ITEMS   %d POSTERS   PRELOADED",
-                static_cast<int>(catalogItems.size()), posterCount);
-            catalogStatus = visibleStatus;
-        } else {
+    CatalogLoadJob catalogJobs[3];
+    catalogJobs[0].type = "movie";
+    catalogJobs[1].type = "series";
+    catalogJobs[2].type = "publicdomain";
+    int activeCatalogDataTab = -1;
+
+    auto storeActiveCatalog = [&]() {
+        if (activeCatalogDataTab < 0 || activeCatalogDataTab >= 3) return;
+        CatalogLoadJob& cache = catalogJobs[activeCatalogDataTab];
+        if (cache.running.load(std::memory_order_acquire) ||
+            cache.completed.load(std::memory_order_acquire)) {
+            // The worker owns its vectors until it has been joined.
             catalogItems.clear();
             catalogPosters.clear();
-            snprintf(result, sizeof(result),
-                "Stremio: catalog failed at stage %d", -catalogResult);
-            catalogStatus = "CATALOG LOAD FAILED - PRESS TRIANGLE TO RETRY";
+            catalogStatus.clear();
+            activeCatalogDataTab = -1;
+            return;
         }
+        cache.items.swap(catalogItems);
+        cache.posters.swap(catalogPosters);
+        cache.status.swap(catalogStatus);
+        cache.loaded = !cache.items.empty();
+        activeCatalogDataTab = -1;
+    };
+
+    auto startCatalogLoad = [&](int tab, bool force) {
+        if (tab < 0 || tab >= 3) return false;
+        CatalogLoadJob& job = catalogJobs[tab];
+        if (job.running.load(std::memory_order_acquire)) return true;
+        if (!force && job.loaded) return true;
+        // Keep the shared PS4 HTTP contexts single-threaded. A rapidly selected
+        // tab remains responsive with placeholders and starts next.
+        for (int index = 0; index < 3; ++index) {
+            if (catalogJobs[index].running.load(std::memory_order_acquire))
+                return false;
+        }
+        job.loaded = false;
+        job.completed.store(false, std::memory_order_release);
+        job.running.store(true, std::memory_order_release);
+        if (pthread_create(&job.thread, nullptr, catalogLoadEntry, &job) != 0) {
+            job.running.store(false, std::memory_order_release);
+            job.status = "CATALOG WORKER FAILED - PRESS TRIANGLE TO RETRY";
+            return false;
+        }
+        return true;
+    };
+
+    auto activateCatalog = [&](int tab, bool force) {
+        storeActiveCatalog();
+        CatalogLoadJob& job = catalogJobs[tab];
+        catalogType = job.type;
+        catalogItems.clear();
+        catalogPosters.clear();
+        if (!force && job.loaded) {
+            job.items.swap(catalogItems);
+            job.posters.swap(catalogPosters);
+            job.status.swap(catalogStatus);
+            job.loaded = false;
+        } else {
+            if (force && !job.running.load(std::memory_order_acquire) &&
+                !job.completed.load(std::memory_order_acquire)) {
+                job.items.clear();
+                job.posters.clear();
+                job.status.clear();
+                job.loaded = false;
+            }
+            catalogStatus = "LOADING - PLACEHOLDERS READY";
+            startCatalogLoad(tab, force);
+        }
+        activeCatalogDataTab = tab;
         focusedCard = 0;
         catalogPage = 0;
         detailVisible = false;
         streamVisible = false;
         detailEpisodeIndex = 0;
-        notify(result);
     };
 
     auto loadSearchResults = [&]() {
@@ -989,18 +1084,16 @@ int main() {
     };
 
     auto selectTab = [&](int tab) {
-        activeTab = (tab + kTopTabCount) % kTopTabCount;
+        const int nextTab = (tab + kTopTabCount) % kTopTabCount;
+        if (nextTab == activeTab) return;
+        if (activeCatalogDataTab >= 0) storeActiveCatalog();
+        activeTab = nextTab;
         detailVisible = false;
         streamVisible = false;
-        if (activeTab == 0) {
-            catalogType = "movie";
-            loadActiveCatalog();
-        } else if (activeTab == 1) {
-            catalogType = "series";
-            loadActiveCatalog();
-        } else if (activeTab == 2) {
-            catalogType = "publicdomain";
-            loadActiveCatalog();
+        if (activeTab < 3) activateCatalog(activeTab, false);
+        else if (activeTab != 3 || !searchShowingResults) {
+            catalogItems.clear();
+            catalogPosters.clear();
         }
     };
 
@@ -1016,9 +1109,33 @@ int main() {
         scene.FrameBufferSwap();
         ++frameId;
     }
-    loadActiveCatalog();
+    activateCatalog(0, false);
 
     while (!exitRequested) {
+        // Adopt completed content only on the main/render thread. Other tabs
+        // retain their completed vectors as an instant in-memory cache.
+        for (int index = 0; index < 3; ++index) {
+            CatalogLoadJob& job = catalogJobs[index];
+            if (!job.completed.exchange(false, std::memory_order_acq_rel))
+                continue;
+            pthread_join(job.thread, nullptr);
+            if (activeCatalogDataTab == index && activeTab == index) {
+                catalogItems.swap(job.items);
+                catalogPosters.swap(job.posters);
+                catalogStatus.swap(job.status);
+                job.loaded = false;
+                char ready[96];
+                snprintf(ready, sizeof(ready),
+                    "Stremio: %d catalog items ready",
+                    static_cast<int>(catalogItems.size()));
+                notify(ready);
+            }
+        }
+        if (activeTab < 3 && catalogItems.empty() &&
+            !catalogJobs[activeTab].running.load(std::memory_order_acquire) &&
+            !catalogJobs[activeTab].loaded) {
+            startCatalogLoad(activeTab, false);
+        }
         const uint32_t buttons = readButtons(pad);
         const uint32_t pressed = buttons & ~previousButtons;
         previousButtons = buttons;
@@ -1091,14 +1208,16 @@ int main() {
                 }
                 if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
                     catalogPage = nextPage;
-                    catalogMotion = 48;
+                    // New selection enters from below; the preview row itself
+                    // remains stationary until it becomes the active row.
+                    catalogMotion = 180;
                     if (catalogPage * 4 + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
-                catalogMotion = -48;
+                catalogMotion = -180;
             }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
@@ -1118,7 +1237,7 @@ int main() {
                 notify("Stremio: search query cleared");
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 3) {
-                notify("Stremio PS4 v2.20 - JavaScript-X community build");
+                notify("Stremio PS4 v2.30 - JavaScript-X community build");
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 4) {
                 notify("Stremio: closing safely...");
@@ -1207,7 +1326,7 @@ int main() {
         }
         if (!previewVisible && activeTab < 3 &&
             (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
-            loadActiveCatalog();
+            activateCatalog(activeTab, true);
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
@@ -1371,6 +1490,13 @@ int main() {
 
     DEBUGLOG << "Stremio graceful shutdown starting";
     avPlayer.stop();
+    for (int index = 0; index < 3; ++index) {
+        CatalogLoadJob& job = catalogJobs[index];
+        const bool wasRunning = job.running.load(std::memory_order_acquire);
+        if (wasRunning) pthread_cancel(job.thread);
+        if (wasRunning || job.completed.load(std::memory_order_acquire))
+            pthread_join(job.thread, nullptr);
+    }
     if (imeDialogInitialized &&
         sceImeDialogGetStatus() == ORBIS_DIALOG_STATUS_RUNNING) {
         sceImeDialogAbort();

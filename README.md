@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 2.20 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.30 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -40,10 +40,12 @@ remain compatible with the small decoder used by the native client.
 Movie titles and navigation labels are rasterized directly into the native
 framebuffer, so the catalog no longer depends on notifications for identity.
 An animated top bar exposes Movies, Series, Public Domain, Search, and Settings
-through L1/R1. Catalogs
-preload two eight-item batches, show the next row as faint animated rounded
-cards, and fetch ahead as Down approaches the loaded boundary. Page changes
-slide into place while selected cards use a soft rounded focus animation.
+through L1/R1. Catalogs load off the render thread and are cached per tab, so
+navigation remains responsive while purple Stremio placeholders appear
+immediately. The next row stays fixed and preloaded; pressing Down promotes it
+with a short bottom-to-top slide instead of continuously animating every card.
+Poster compositing uses contiguous scanline copies to keep menu rendering near
+60 FPS while selected cards retain a soft rounded focus animation.
 The left analog stick mirrors D-pad navigation. Search opens the native PS4
 system keyboard and queries the canonical Cinemeta endpoint. The interface now
 uses the bundled OFL-licensed Gontserrat font with anti-aliased text plus the

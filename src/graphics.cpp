@@ -211,10 +211,14 @@ void Scene2D::BlitRgbMasked(
     for (int row = 0; row < height; ++row) {
         uint32_t* destination = buffer + static_cast<size_t>(y + row) * width_ + x;
         const uint32_t* source = pixels + static_cast<size_t>(row) * width;
-        for (int column = 0; column < width; ++column) {
-            if ((source[column] & 0xff000000u) == 0)
-                destination[column] = 0x80000000u | source[column];
-        }
+        // Rounded poster masks only trim a run at each edge. Find those runs
+        // once, then copy the solid span without a branch for every pixel.
+        int first = 0;
+        while (first < width && (source[first] & 0xff000000u) != 0) ++first;
+        int last = width;
+        while (last > first && (source[last - 1] & 0xff000000u) != 0) --last;
+        for (int column = first; column < last; ++column)
+            destination[column] = 0x80000000u | source[column];
     }
 }
 
