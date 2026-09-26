@@ -148,6 +148,7 @@ public:
     bool paused() const { return paused_; }
     uint64_t decodedFrames() const;
     uint64_t currentTime() const;
+    uint64_t duration() const { return duration_; }
 
 private:
     static void* decoderThreadEntry(void* argument);
@@ -164,6 +165,7 @@ private:
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;
     uint64_t decodedFrames_ = 0;
+    uint64_t duration_ = 0;
     pthread_t decoderThread_ = {};
     mutable pthread_mutex_t previewMutex_ = {};
     volatile bool decoderThreadRunning_ = false;

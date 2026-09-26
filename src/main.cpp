@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
 
 #include <orbis/libkernel.h>
 #include <orbis/Http.h>
@@ -44,6 +45,9 @@ constexpr const char* kPublicDomainBaseUrl =
     "https://caching.stremio.net/publicdomainmovies.now.sh/";
 constexpr const char* kLegalRemoteVideoUrl =
     "https://media.w3.org/2010/05/sintel/trailer.mp4";
+constexpr const char* kLegalRemoteCachePath = "/data/stremio-remote-sintel.mp4";
+constexpr size_t kMaximumDemoVideoBytes = 16 * 1024 * 1024;
+constexpr size_t kLegalRemoteVideoBytes = 4372373;
 constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
 constexpr int kPosterWidth = 310;
@@ -245,9 +249,15 @@ void drawDecodedPreview(
     const std::vector<uint32_t>& pixels,
     uint32_t previewWidth,
     uint32_t previewHeight,
-    bool paintBackground) {
+    bool paintBackground,
+    uint64_t currentTime,
+    uint64_t duration,
+    bool paused) {
     const Color background = {8, 8, 12};
     const Color border = {196, 174, 255};
+    const Color track = {45, 45, 58};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
     const int width = static_cast<int>(previewWidth);
     const int height = static_cast<int>(previewHeight);
     const int startX = (kWidth - width) / 2;
@@ -258,6 +268,23 @@ void drawDecodedPreview(
     }
 
     scene.BlitRgb(startX, startY, width, height, pixels.data());
+    const int timelineX = 480;
+    const int timelineWidth = 960;
+    scene.DrawRectangle(420, 835, 1080, 125, background);
+    scene.DrawRectangle(timelineX, 870, timelineWidth, 14, track);
+    if (duration > 0) {
+        const int progress = static_cast<int>(
+            std::min<uint64_t>(currentTime, duration) * timelineWidth / duration);
+        scene.DrawRectangle(timelineX, 870, progress, 14, purple);
+    }
+    char clock[96];
+    snprintf(clock, sizeof(clock), "%s   %02llu:%02llu / %02llu:%02llu",
+        paused ? "PAUSED" : "PLAYING",
+        static_cast<unsigned long long>(currentTime / 60000),
+        static_cast<unsigned long long>((currentTime / 1000) % 60),
+        static_cast<unsigned long long>(duration / 60000),
+        static_cast<unsigned long long>((duration / 1000) % 60));
+    scene.DrawText(480, 910, clock, text, 2);
 }
 
 void notify(const char* message) {
@@ -379,6 +406,32 @@ int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
     return result;
 }
 
+int cacheLegalRemoteTrailer(bool& reused) {
+    reused = false;
+    struct stat fileInfo = {};
+    if (stat(kLegalRemoteCachePath, &fileInfo) == 0 &&
+        static_cast<size_t>(fileInfo.st_size) == kLegalRemoteVideoBytes) {
+        reused = true;
+        return static_cast<int>(fileInfo.st_size);
+    }
+
+    std::string video;
+    const int bytes = downloadUrl(
+        kLegalRemoteVideoUrl, kMaximumDemoVideoBytes, video);
+    if (bytes < 0 || static_cast<size_t>(bytes) != kLegalRemoteVideoBytes) {
+        return bytes < 0 ? bytes : -11;
+    }
+    FILE* output = fopen(kLegalRemoteCachePath, "wb");
+    if (!output) return -12;
+    const size_t written = fwrite(video.data(), 1, video.size(), output);
+    const int closeResult = fclose(output);
+    if (written != video.size() || closeResult != 0) {
+        remove(kLegalRemoteCachePath);
+        return -13;
+    }
+    return bytes;
+}
+
 int fetchCatalog(
     const std::string& catalogType,
     std::vector<CatalogItem>& items) {
@@ -462,7 +515,7 @@ int fetchPosters(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.50: addon streams and remote playback");
+    notify("Stremio 1.60: cached HTTPS playback and timeline");
 
     const int pad = initializeController();
     notify(pad >= 0
@@ -688,13 +741,7 @@ int main() {
             if (stream.url.empty()) {
                 notify("Stremio: torrent stream needs the companion service");
             } else if (stream.url.compare(0, 8, "https://") == 0) {
-                previewVisible = false;
-                previewBackgroundFrames = 0;
-                playbackWallStart = 0;
-                playbackTimingReported = false;
-                avPlayerProbeFrames = 0;
-                notify("Stremio: opening direct HTTPS stream...");
-                avPlayer.start(stream.url.c_str());
+                notify("Stremio: HTTPS streams need the cache/companion bridge");
             } else {
                 notify("Stremio: rejected non-HTTPS direct stream");
             }
@@ -725,11 +772,24 @@ int main() {
             playbackWallStart = 0;
             playbackTimingReported = false;
             avPlayerProbeFrames = 0;
-            notify("Stremio: opening legal remote HTTPS trailer...");
-            if (!avPlayer.start(kLegalRemoteVideoUrl)) {
+            notify("Stremio: checking verified remote trailer cache...");
+            bool reused = false;
+            const int cacheResult = cacheLegalRemoteTrailer(reused);
+            if (cacheResult < 0) {
                 char result[128];
                 snprintf(result, sizeof(result),
-                    "Stremio: remote AVPlayer stage %d, code 0x%08x",
+                    "Stremio: remote cache failed at stage %d",
+                    -cacheResult);
+                notify(result);
+            } else {
+                notify(reused
+                    ? "Stremio: using cached HTTPS trailer"
+                    : "Stremio: HTTPS trailer downloaded and cached");
+            }
+            if (cacheResult >= 0 && !avPlayer.start(kLegalRemoteCachePath)) {
+                char result[128];
+                snprintf(result, sizeof(result),
+                    "Stremio: cached AVPlayer stage %d, code 0x%08x",
                     avPlayer.errorStage(),
                     static_cast<unsigned int>(avPlayer.errorCode()));
                 notify(result);
@@ -790,7 +850,8 @@ int main() {
             avPlayer.copyPreview(previewPixels, previewWidth, previewHeight);
             drawDecodedPreview(
                 scene, previewPixels, previewWidth, previewHeight,
-                previewBackgroundFrames > 0);
+                previewBackgroundFrames > 0, avPlayer.currentTime(),
+                avPlayer.duration(), avPlayer.paused());
             if (previewBackgroundFrames > 0) {
                 --previewBackgroundFrames;
             }

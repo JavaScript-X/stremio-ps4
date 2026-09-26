@@ -109,6 +109,7 @@ bool AvPlayerProbe::start(const char* url) {
     previewWidth_ = 0;
     previewHeight_ = 0;
     decodedFrames_ = 0;
+    duration_ = 0;
     stopDecoderThread_ = false;
     started_ = false;
     paused_ = false;
@@ -179,6 +180,7 @@ void AvPlayerProbe::update() {
                 sceAvPlayerEnableStream(handle_, index) >= 0) {
                 width_ = info.details.video.width;
                 height_ = info.details.video.height;
+                duration_ = info.duration;
                 videoEnabled = true;
             }
         }

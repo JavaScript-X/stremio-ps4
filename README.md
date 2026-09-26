@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.50 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 1.60 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of eight
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -45,10 +45,14 @@ release information, runtime, and a wrapped description.
 Detail screens also show IMDb rating and genres. Series metadata exposes up to
 256 episodes with Left/Right episode navigation and Cross selection.
 The official Public Domain Movies addon is available as a third catalog. Its
-stream resources are parsed into a native results screen, where direct HTTPS
-streams are playable and torrent descriptors are identified as requiring the
-planned companion service. A separate legal remote Sintel probe tests AVPlayer
-HTTPS transport without involving torrent or copyrighted sources.
+stream resources are parsed into a native results screen. Torrent descriptors
+and arbitrary direct HTTPS streams are identified as requiring the planned
+companion/cache bridge instead of being passed to AVPlayer's unsupported URL
+path. A separate legal remote Sintel probe downloads through the app's
+certificate-verified HTTPS client into persistent app storage and then feeds
+that local cache to AVPlayer. The first run downloads the 4.37 MB trailer and
+later runs reuse it. Playback now includes a native progress bar, elapsed/total
+clock, and visible playing/paused state.
 It does not log in, load user addons, or present decoded audio yet.
 
 M1 controller test controls:
@@ -65,7 +69,8 @@ M1 controller test controls:
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
-- **R2** runs the remote HTTPS AVPlayer probe using the legal Sintel trailer.
+- **R2** downloads (or reuses) the legal remote Sintel trailer through verified
+  HTTPS, then plays it from the persistent local cache.
 - On a Public Domain detail page, **Cross** resolves addon streams. The stream
   screen uses **Up/Down**, **Cross**, and **Circle**.
 - **Circle** cancels an active AVPlayer probe.
