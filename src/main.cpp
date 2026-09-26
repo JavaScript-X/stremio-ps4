@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <cwchar>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -9,6 +11,8 @@
 
 #include <orbis/libkernel.h>
 #include <orbis/Http.h>
+#include <orbis/CommonDialog.h>
+#include <orbis/ImeDialog.h>
 #include <orbis/Net.h>
 #include <orbis/Pad.h>
 #include <orbis/Ssl.h>
@@ -60,6 +64,15 @@ const char* const kTopTabs[kTopTabCount] = {
 int networkPoolId = 0;
 int sslContextId = 0;
 int httpContextId = 0;
+PosterImage headerLogo;
+
+void drawBrand(Scene2D& scene, Color text) {
+    if (headerLogo.valid()) {
+        scene.BlitRgbScaledRounded(42, 27, 64, 64, 14,
+            headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
+    }
+    scene.DrawText(125, 42, "STREMIO", text, 3);
+}
 
 std::string shortTitle(const std::string& title) {
     constexpr size_t kMaximumCharacters = 18;
@@ -102,7 +115,8 @@ void drawHardwareProbe(
     const std::vector<PosterImage>& posters,
     int activeTab,
     int indicatorX,
-    int animationFrame) {
+    int animationFrame,
+    int catalogMotion) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
     const Color stremioPurple = {123, 91, 214};
@@ -114,7 +128,7 @@ void drawHardwareProbe(
 
     scene.FrameBufferFill(background);
     scene.DrawRectangle(0, 0, kWidth, 145, header);
-    scene.DrawText(60, 45, "STREMIO", text, 3);
+    drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
         scene.DrawText(tabX[index], 52, kTopTabs[index],
@@ -132,34 +146,50 @@ void drawHardwareProbe(
         (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
         text, 3);
     const int cardX[] = {120, 565, 1010, 1455};
+    const int cardY = 260 + catalogMotion;
     for (int index = 0; index < 4; ++index) {
         const int itemIndex = page * 4 + index;
         if (index == focusedCard) {
             const int pulse = (animationFrame / 8) % 2;
-            scene.DrawRectangle(cardX[index] - 8 - pulse, 252 - pulse,
-                326 + pulse * 2, 426 + pulse * 2, focus);
+            scene.DrawRoundedRectangle(cardX[index] - 8 - pulse,
+                cardY - 8 - pulse,
+                326 + pulse * 2, 426 + pulse * 2, 22, focus);
         }
-        scene.DrawRectangle(cardX[index], 260, 310, 410,
+        scene.DrawRoundedRectangle(cardX[index], cardY, 310, 410, 18,
             itemIndex < static_cast<int>(items.size()) ? card : cardMuted);
         if (itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid()) {
-            scene.BlitRgb(
-                cardX[index], 260, posters[itemIndex].width,
-                posters[itemIndex].height, posters[itemIndex].pixels.data());
+            scene.BlitRgbRounded(cardX[index], cardY, posters[itemIndex].width,
+                posters[itemIndex].height, 18, posters[itemIndex].pixels.data());
         }
         if (itemIndex < static_cast<int>(items.size())) {
             const std::string title = shortTitle(items[itemIndex].name);
-            scene.DrawText(cardX[index], 690, title.c_str(), text, 2);
+            scene.DrawText(cardX[index], cardY + 430, title.c_str(), text, 2);
         }
     }
 
-    scene.DrawText(120, 780, status.c_str(), mutedText, 2);
+    const int nextPage = page + 1;
+    const int previewY = 820 + static_cast<int>(8.0 *
+        std::sin(static_cast<double>(animationFrame) * 0.06));
+    for (int index = 0; index < 4; ++index) {
+        const int itemIndex = nextPage * 4 + index;
+        const int x = 170 + index * 430;
+        scene.DrawRoundedRectangle(x, previewY, 220, 290, 16, cardMuted);
+        if (itemIndex < static_cast<int>(posters.size()) &&
+            posters[itemIndex].valid()) {
+            scene.BlitRgbScaledRounded(x, previewY, 220, 290, 16,
+                posters[itemIndex].pixels.data(), posters[itemIndex].width,
+                posters[itemIndex].height, 72);
+        }
+    }
+
+    scene.DrawText(120, 740, status.c_str(), mutedText, 2);
     scene.DrawText(
-        120, 850,
+        120, 775,
         "R1/R2 TABS   LEFT/RIGHT SELECT   UP/DOWN CONTINUOUS SCROLL",
         mutedText, 2);
     scene.DrawText(
-        120, 905, "CROSS DETAILS   SQUARE LOCAL VIDEO",
+        1150, 775, "CROSS DETAILS   SQUARE LOCAL VIDEO",
         mutedText, 2);
     char pageText[64];
     snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
@@ -167,17 +197,16 @@ void drawHardwareProbe(
     scene.DrawText(1540, 182, pageText, mutedText, 2);
 }
 
-void drawSearch(Scene2D& scene, const std::string& query, int keyIndex,
+void drawSearch(Scene2D& scene, const std::string& query, int,
     int indicatorX, int animationFrame) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
     const Color purple = {123, 91, 214};
-    const Color focus = {196, 174, 255};
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
     scene.DrawRectangle(0, 0, kWidth, 145, header);
-    scene.DrawText(60, 45, "STREMIO", text, 3);
+    drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
         scene.DrawText(tabX[index], 52, kTopTabs[index],
@@ -185,27 +214,17 @@ void drawSearch(Scene2D& scene, const std::string& query, int keyIndex,
     }
     scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
     scene.DrawText(120, 185, "SEARCH CINEMETA", text, 3);
-    scene.DrawRectangle(120, 250, 1680, 75, header);
+    scene.DrawRoundedRectangle(220, 300, 1480, 110, 24, header);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
-    scene.DrawText(155, 273, shown.c_str(), query.empty() ? muted : text, 3);
-    const char* keys = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    for (int index = 0; index < 36; ++index) {
-        const int column = index % 9;
-        const int row = index / 9;
-        const int x = 260 + column * 155;
-        const int y = 400 + row * 120;
-        if (index == keyIndex) {
-            const int pulse = (animationFrame / 8) % 2;
-            scene.DrawRectangle(x - 8 - pulse, y - 8 - pulse,
-                86 + pulse * 2, 86 + pulse * 2, focus);
-        }
-        scene.DrawRectangle(x, y, 70, 70, header);
-        char label[2] = {keys[index], 0};
-        scene.DrawText(x + 22, y + 20, label, text, 2);
-    }
-    scene.DrawText(260, 930,
-        "CROSS TYPE   SQUARE BACKSPACE   TRIANGLE SEARCH   CIRCLE CLEAR",
-        muted, 2);
+    scene.DrawText(270, 335, shown.c_str(), query.empty() ? muted : text, 3);
+    const int pulse = (animationFrame / 10) % 2;
+    scene.DrawRoundedRectangle(630 - pulse, 510 - pulse,
+        660 + pulse * 2, 115 + pulse * 2, 28, purple);
+    scene.DrawText(760, 548, "OPEN PS4 KEYBOARD", text, 3);
+    scene.DrawText(510, 720,
+        "PRESS CROSS TO TYPE WITH THE SYSTEM KEYBOARD", muted, 2);
+    scene.DrawText(610, 790,
+        "TRIANGLE SEARCH   CIRCLE CLEAR", muted, 2);
 }
 
 void drawSettings(Scene2D& scene, int selected, int indicatorX) {
@@ -217,7 +236,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
     scene.DrawRectangle(0, 0, kWidth, 145, header);
-    scene.DrawText(60, 45, "STREMIO", text, 3);
+    drawBrand(scene, text);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     for (int index = 0; index < kTopTabCount; ++index) {
         scene.DrawText(tabX[index], 52, kTopTabs[index],
@@ -229,7 +248,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "LOCAL H.264 PLAYBACK TEST",
         "CACHED HTTPS PLAYBACK TEST",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO PS4  v1.90"};
+        "ABOUT STREMIO PS4  v2.00"};
     for (int index = 0; index < 4; ++index) {
         const int y = 300 + index * 125;
         if (index == selected) scene.DrawRectangle(112, y - 8, 1696, 86, focus);
@@ -381,10 +400,10 @@ void notify(const char* message) {
     sceSysUtilSendSystemNotificationWithText(222, message);
 }
 
-int initializeController() {
+int initializeController(int& userId) {
     OrbisUserServiceInitializeParams userParams = {};
     userParams.priority = ORBIS_KERNEL_PRIO_FIFO_LOWEST;
-    int userId = -1;
+    userId = -1;
 
     sceUserServiceInitialize(&userParams);
     if (sceUserServiceGetInitialUser(&userId) != 0 || scePadInit() != 0) {
@@ -400,7 +419,102 @@ uint32_t readButtons(int pad) {
     }
 
     OrbisPadData padData = {};
-    return scePadReadState(pad, &padData) == 0 ? padData.buttons : 0;
+    if (scePadReadState(pad, &padData) != 0) return 0;
+    uint32_t buttons = padData.buttons;
+    constexpr uint8_t kStickLow = 58;
+    constexpr uint8_t kStickHigh = 198;
+    constexpr uint8_t kTriggerPressed = 96;
+    if (padData.leftStick.x < kStickLow) buttons |= ORBIS_PAD_BUTTON_LEFT;
+    if (padData.leftStick.x > kStickHigh) buttons |= ORBIS_PAD_BUTTON_RIGHT;
+    if (padData.leftStick.y < kStickLow) buttons |= ORBIS_PAD_BUTTON_UP;
+    if (padData.leftStick.y > kStickHigh) buttons |= ORBIS_PAD_BUTTON_DOWN;
+    if (padData.analogButtons.r2 > kTriggerPressed)
+        buttons |= ORBIS_PAD_BUTTON_R2;
+    if (padData.analogButtons.l2 > kTriggerPressed)
+        buttons |= ORBIS_PAD_BUTTON_L2;
+    return buttons;
+}
+
+bool openSystemSearchKeyboard(int userId, std::string& query) {
+    static bool initialized = false;
+    if (!initialized) {
+        if (sceSysmoduleLoadModuleInternal(
+                ORBIS_SYSMODULE_INTERNAL_COMMON_DIALOG) < 0 ||
+            sceSysmoduleLoadModule(ORBIS_SYSMODULE_IME_DIALOG) < 0) {
+            return false;
+        }
+        sceCommonDialogInitialize();
+        initialized = true;
+    }
+
+    // The PS4 IME ABI uses UTF-16 even though this target's wchar_t is 32-bit.
+    uint16_t buffer[65] = {};
+    size_t outputIndex = 0;
+    for (size_t index = 0; index < query.size() && outputIndex < 64;) {
+        const unsigned char first = query[index];
+        uint32_t codepoint = '?';
+        if (first < 0x80) {
+            codepoint = first;
+            ++index;
+        } else if ((first >> 5) == 0x6 && index + 1 < query.size()) {
+            codepoint = ((first & 0x1f) << 6) |
+                (static_cast<unsigned char>(query[index + 1]) & 0x3f);
+            index += 2;
+        } else if ((first >> 4) == 0xe && index + 2 < query.size()) {
+            codepoint = ((first & 0x0f) << 12) |
+                ((static_cast<unsigned char>(query[index + 1]) & 0x3f) << 6) |
+                (static_cast<unsigned char>(query[index + 2]) & 0x3f);
+            index += 3;
+        } else {
+            ++index;
+        }
+        buffer[outputIndex++] = static_cast<uint16_t>(
+            codepoint <= 0xffff ? codepoint : '?');
+    }
+    static const uint16_t title[] = {
+        'S','e','a','r','c','h',' ','S','t','r','e','m','i','o',0};
+    static const uint16_t placeholder[] = {
+        'M','o','v','i','e',' ','o','r',' ','s','e','r','i','e','s',' ',
+        't','i','t','l','e',0};
+    OrbisImeDialogSetting settings = {};
+    settings.userId = static_cast<uint32_t>(userId);
+    settings.type = ORBIS_TYPE_DEFAULT;
+    settings.enterLabel = ORBIS_BUTTON_LABEL_SEARCH;
+    settings.inputMethod = ORBIS__DEFAULT;
+    settings.maxTextLength = 64;
+    settings.inputTextBuffer = reinterpret_cast<wchar_t*>(buffer);
+    settings.horizontalAlignment = ORBIS_H_CENTER;
+    settings.verticalAlignment = ORBIS_V_CENTER;
+    settings.placeholder = reinterpret_cast<const wchar_t*>(placeholder);
+    settings.title = reinterpret_cast<const wchar_t*>(title);
+    if (sceImeDialogInit(&settings, nullptr) < 0) return false;
+
+    OrbisDialogStatus status = sceImeDialogGetStatus();
+    while (status == ORBIS_DIALOG_STATUS_RUNNING) {
+        sceKernelUsleep(16000);
+        status = sceImeDialogGetStatus();
+    }
+    OrbisDialogResult result = {};
+    const bool accepted = status == ORBIS_DIALOG_STATUS_STOPPED &&
+        sceImeDialogGetResult(&result) >= 0 &&
+        result.endstatus == ORBIS_DIALOG_OK;
+    sceImeDialogTerm();
+    if (!accepted) return false;
+    query.clear();
+    for (size_t index = 0; index < 64 && buffer[index] != 0; ++index) {
+        const uint32_t character = buffer[index];
+        if (character < 0x80) {
+            query.push_back(static_cast<char>(character));
+        } else if (character < 0x800) {
+            query.push_back(static_cast<char>(0xc0 | (character >> 6)));
+            query.push_back(static_cast<char>(0x80 | (character & 0x3f)));
+        } else {
+            query.push_back(static_cast<char>(0xe0 | (character >> 12)));
+            query.push_back(static_cast<char>(0x80 | ((character >> 6) & 0x3f)));
+            query.push_back(static_cast<char>(0x80 | (character & 0x3f)));
+        }
+    }
+    return true;
 }
 
 bool initializeHttp() {
@@ -520,6 +634,23 @@ int cacheLegalRemoteTrailer(bool& reused) {
         return -13;
     }
     return bytes;
+}
+
+bool loadBundledImage(
+    const char* path, int width, int height, PosterImage& image) {
+    FILE* file = fopen(path, "rb");
+    if (!file) return false;
+    fseek(file, 0, SEEK_END);
+    const long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    if (size <= 0 || size > 4 * 1024 * 1024) {
+        fclose(file);
+        return false;
+    }
+    std::string encoded(static_cast<size_t>(size), '\0');
+    const bool read = fread(&encoded[0], 1, encoded.size(), file) == encoded.size();
+    fclose(file);
+    return read && decodePosterJpeg(encoded, width, height, image);
 }
 
 std::string urlEncode(const std::string& value) {
@@ -650,9 +781,10 @@ int appendCatalogPage(
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     DEBUGLOG << "Stremio native client starting";
-    notify("Stremio 1.90: animated tabs, search and infinite scroll");
+    notify("Stremio 2.00: system keyboard and polished catalog UI");
 
-    const int pad = initializeController();
+    int userId = -1;
+    const int pad = initializeController(userId);
     notify(pad >= 0
         ? "Stremio: controller ready"
         : "Stremio: controller initialization failed");
@@ -694,6 +826,7 @@ int main() {
     int activeTab = 0;
     int indicatorX = 350;
     int animationFrame = 0;
+    int catalogMotion = 0;
     int searchKey = 0;
     int settingsSelection = 0;
     bool searchShowingResults = false;
@@ -706,6 +839,8 @@ int main() {
     MetaDetails details;
     std::vector<StreamItem> streams;
     scene.SetActiveFrameBuffer(0);
+    loadBundledImage(
+        "/app0/assets/stremio-official.png", 96, 96, headerLogo);
 
     auto loadActiveCatalog = [&]() {
         char loading[96];
@@ -718,13 +853,23 @@ int main() {
             catalogType, 0, "", catalogItems);
         char result[192];
         if (catalogResult > 0) {
-            const int posterCount = fetchPosters(catalogItems, catalogPosters);
+            int posterCount = fetchPosters(catalogItems, catalogPosters);
+            const size_t beforePreload = catalogPosters.size();
+            const int preloaded = appendCatalogPage(
+                catalogType, catalogItems, catalogPosters);
+            if (preloaded > 0) {
+                for (size_t index = beforePreload;
+                     index < catalogPosters.size(); ++index) {
+                    if (catalogPosters[index].valid()) ++posterCount;
+                }
+            }
             snprintf(result, sizeof(result),
                 "Stremio: loaded %d cards and %d posters",
-                catalogResult, posterCount);
+                static_cast<int>(catalogItems.size()), posterCount);
             char visibleStatus[128];
             snprintf(visibleStatus, sizeof(visibleStatus),
-                "%d ITEMS   %d POSTERS   ONLINE", catalogResult, posterCount);
+                "%d ITEMS   %d POSTERS   PRELOADED",
+                static_cast<int>(catalogItems.size()), posterCount);
             catalogStatus = visibleStatus;
         } else {
             catalogItems.clear();
@@ -792,7 +937,7 @@ int main() {
         drawHardwareProbe(
             scene, focusedCard, catalogPage, catalogType, catalogStatus,
             catalogItems, catalogPosters, activeTab, indicatorX,
-            animationFrame);
+            animationFrame, catalogMotion);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
@@ -839,21 +984,14 @@ int main() {
         }
 
         if (shellVisible && activeTab == 3 && !searchShowingResults) {
-            if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && searchKey % 9 > 0)
-                --searchKey;
-            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && searchKey % 9 < 8)
-                ++searchKey;
-            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && searchKey >= 9)
-                searchKey -= 9;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0 && searchKey < 27)
-                searchKey += 9;
-            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-                searchQuery.size() < 32) {
-                const char* keys = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                searchQuery.push_back(keys[searchKey]);
+            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
+                if (openSystemSearchKeyboard(userId, searchQuery)) {
+                    loadSearchResults();
+                } else {
+                    notify("Stremio: system keyboard cancelled or unavailable");
+                }
+                previousButtons = readButtons(pad);
             }
-            if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 &&
-                !searchQuery.empty()) searchQuery.pop_back();
             if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) searchQuery.clear();
             if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
                 loadSearchResults();
@@ -865,7 +1003,8 @@ int main() {
                     static_cast<int>(catalogItems.size())) ++focusedCard;
             if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
                 const int nextPage = catalogPage + 1;
-                if (nextPage * 4 >= static_cast<int>(catalogItems.size()) &&
+                if ((nextPage + 1) * 4 >=
+                        static_cast<int>(catalogItems.size()) &&
                     activeTab < 3) {
                     catalogStatus = "LOADING MORE ITEMS...";
                     const int added = appendCatalogPage(
@@ -879,12 +1018,15 @@ int main() {
                 }
                 if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
                     catalogPage = nextPage;
+                    catalogMotion = 90;
                     if (catalogPage * 4 + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
-            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0)
+            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
+                catalogMotion = -90;
+            }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
                 searchShowingResults = false;
@@ -903,7 +1045,7 @@ int main() {
                 notify("Stremio: search query cleared");
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                 settingsSelection == 3) {
-                notify("Stremio PS4 v1.90 - JavaScript-X community build");
+                notify("Stremio PS4 v2.00 - JavaScript-X community build");
             }
         }
         if (!previewVisible && detailVisible && catalogType == "series" &&
@@ -1136,13 +1278,17 @@ int main() {
             drawHardwareProbe(
                 scene, focusedCard, catalogPage, catalogType, catalogStatus,
                 catalogItems, catalogPosters, activeTab, indicatorX,
-                animationFrame);
+                animationFrame, catalogMotion);
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
         ++frameId;
         ++animationFrame;
+        if (catalogMotion != 0) {
+            catalogMotion = catalogMotion * 3 / 4;
+            if (catalogMotion > -2 && catalogMotion < 2) catalogMotion = 0;
+        }
 
     }
 }

@@ -1,6 +1,5 @@
 #include "poster.h"
 
-#define STBI_ONLY_JPEG
 #define STBI_NO_STDIO
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -26,7 +25,7 @@ bool decodePosterJpeg(
         &sourceWidth,
         &sourceHeight,
         &channels,
-        3);
+        4);
     if (!decoded || sourceWidth <= 0 || sourceHeight <= 0 ||
         sourceWidth > kMaximumSourceDimension ||
         sourceHeight > kMaximumSourceDimension) {
@@ -42,11 +41,14 @@ bool decodePosterJpeg(
         for (int x = 0; x < outputWidth; ++x) {
             const int sourceX = x * sourceWidth / outputWidth;
             const stbi_uc* pixel = decoded +
-                (static_cast<size_t>(sourceY) * sourceWidth + sourceX) * 3;
+                (static_cast<size_t>(sourceY) * sourceWidth + sourceX) * 4;
+            const uint32_t alpha = pixel[3];
+            const uint32_t inverse = 255 - alpha;
+            const uint32_t red = (pixel[0] * alpha + 29 * inverse) / 255;
+            const uint32_t green = (pixel[1] * alpha + 29 * inverse) / 255;
+            const uint32_t blue = (pixel[2] * alpha + 39 * inverse) / 255;
             poster.pixels[static_cast<size_t>(y) * outputWidth + x] =
-                (static_cast<uint32_t>(pixel[0]) << 16) |
-                (static_cast<uint32_t>(pixel[1]) << 8) |
-                static_cast<uint32_t>(pixel[2]);
+                (red << 16) | (green << 8) | blue;
         }
     }
     stbi_image_free(decoded);

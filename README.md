@@ -32,7 +32,7 @@ Shutdown joins that worker before stopping and closing AVPlayer, preventing a
 decoder/close race.
 Programmatic Home navigation is disabled because it is unstable on the tested
 firmware. The native PS button performs Home/background navigation safely.
-Version 1.90 adds a controller-driven Stremio catalog browser: bounded HTTPS
+Version 2.00 adds a controller-driven Stremio catalog browser: bounded HTTPS
 downloads of Cinemeta catalogs, dependency-free parsing of paginated
 metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
 Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
@@ -40,11 +40,15 @@ remain compatible with the small decoder used by the native client.
 Movie titles and navigation labels are rasterized directly into the native
 framebuffer, so the catalog no longer depends on notifications for identity.
 An animated top bar exposes Movies, Series, Public Domain, Search, and Settings
-through R1/R2. Catalogs begin with eight items and automatically append another
-page as Down reaches the loaded boundary, providing continuous scrolling. A
-native 36-key controller keyboard searches the canonical Cinemeta endpoint and
-opens matching movie details. Settings contains local and cached-HTTPS playback
-diagnostics plus query reset and build information.
+through R1/R2. Digital and analog trigger input are both recognized. Catalogs
+preload two eight-item batches, show the next row as faint animated rounded
+cards, and fetch ahead as Down approaches the loaded boundary. Page changes
+slide into place while selected cards use a soft rounded focus animation.
+The left analog stick mirrors D-pad navigation. Search opens the native PS4
+system keyboard and queries the canonical Cinemeta endpoint. The interface now
+uses the bundled OFL-licensed Gontserrat font with anti-aliased text plus the
+official Stremio mark in the top bar. Settings contains local and cached-HTTPS
+playback diagnostics plus query reset and build information.
 Detail screens also show IMDb rating and genres. Series metadata exposes up to
 256 episodes with Left/Right episode navigation and Cross selection.
 The official Public Domain Movies addon is available as a third catalog. Its
@@ -68,7 +72,7 @@ It does not log in, load user addons, or present decoded audio yet.
 
 Controller controls:
 
-- **Left/Right** moves the highlighted poster card.
+- **D-pad or left analog stick** moves through cards and vertical lists.
 - The default Movies catalog loads automatically at startup.
 - **R1/R2** moves forward/backward through the five animated top tabs.
 - **Up/Down** continuously scrolls catalog pages and fetches more at the end.
@@ -79,8 +83,8 @@ Controller controls:
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
-- The Search tab uses the D-pad and **Cross** to type, **Square** to erase,
-  **Triangle** to submit, and **Circle** to clear or return from results.
+- On Search, **Cross** opens the PS4 system keyboard. Its Search button submits
+  the query; **Triangle** repeats it and **Circle** clears or returns from results.
 - The Settings tab contains the packaged and cached-HTTPS playback tests.
 - On a Public Domain detail page, **Cross** resolves addon streams. The stream
   screen uses **Up/Down**, **Cross**, and **Circle**.

@@ -26,7 +26,16 @@ public:
     void FrameBufferFill(Color color);
     void DrawPixel(int x, int y, Color color);
     void DrawRectangle(int x, int y, int width, int height, Color color);
+    void DrawRoundedRectangle(
+        int x, int y, int width, int height, int radius, Color color);
     void BlitRgb(int x, int y, int width, int height, const uint32_t* pixels);
+    void BlitRgbRounded(
+        int x, int y, int width, int height, int radius,
+        const uint32_t* pixels, uint8_t opacity = 255);
+    void BlitRgbScaledRounded(
+        int x, int y, int width, int height, int radius,
+        const uint32_t* pixels, int sourceWidth, int sourceHeight,
+        uint8_t opacity = 255);
     void DrawText(
         int x, int y, const char* text, Color color, int scale = 2);
 
