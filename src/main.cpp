@@ -397,7 +397,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.80"};
+        "ABOUT STREMIO  v2.81"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }

@@ -341,14 +341,14 @@ void AvPlayerProbe::decoderLoop() {
 void AvPlayerProbe::stop() {
     if (handle_) {
         stopDecoderThread_ = true;
-        // Stop first so a frame pull blocked while the app is backgrounded is
-        // released. The worker checks the stop flag before touching frame data;
-        // close still happens only after the worker has joined.
-        sceAvPlayerStop(handle_);
+        // GetVideoData[Ex] is non-blocking. Join the frame-pull worker before
+        // calling Stop: invoking Stop concurrently with a frame query can tear
+        // down AVPlayer-owned frame memory and crash during Circle/back.
         if (decoderThreadRunning_) {
             pthread_join(decoderThread_, nullptr);
             decoderThreadRunning_ = false;
         }
+        if (started_) sceAvPlayerStop(handle_);
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
     }

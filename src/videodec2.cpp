@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <orbis/libkernel.h>
+#include <orbis/Sysmodule.h>
 
 namespace {
 constexpr size_t kDirectAlignment = 0x200000;
@@ -135,11 +136,12 @@ void releaseDirect(DirectBlock& block) {
     block = {};
 }
 
-bool resolve(int module, const char* name, void** target) {
-    return sceKernelDlsym(module, name, target) >= 0 && *target;
+int32_t resolve(int module, const char* name, void** target) {
+    const int32_t result = sceKernelDlsym(module, name, target);
+    return result >= 0 && *target ? 0 : (result < 0 ? result : -1);
 }
 
-bool loadApi(Api& api, int32_t& code) {
+bool loadApi(Api& api, int& stage, int32_t& code) {
     const char* dependencies[] = {
         "/system/common/lib/libSceVdecCore.sprx",
         "/system/common/lib/libSceVdecSavc.sprx",
@@ -147,13 +149,23 @@ bool loadApi(Api& api, int32_t& code) {
         "/system/common/lib/libSceVdecwrap.sprx"};
     for (const char* dependency : dependencies)
         sceKernelLoadStartModule(dependency, 0, nullptr, 0, nullptr, nullptr);
-    const int module = sceKernelLoadStartModule(
+    // VdecCore must also be registered through Sysmodule on retail firmware.
+    // Loading only its path is insufficient on newer system software.
+    sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_VDECCORE);
+    int module = sceKernelLoadStartModule(
         "/system/common/lib/libSceVideodec2.sprx", 0, nullptr, 0,
         nullptr, nullptr);
-    if (module < 0) { code = module; return false; }
+    if (module < 0) {
+        // Sandboxed applications on some firmwares resolve the system module
+        // by basename even though the absolute path returns ENOENT.
+        module = sceKernelLoadStartModule("libSceVideodec2.sprx", 0,
+            nullptr, 0, nullptr, nullptr);
+    }
+    if (module < 0) { stage = 2; code = module; return false; }
 #define VD2_RESOLVE(field, symbol) \
-    if (!resolve(module, symbol, reinterpret_cast<void**>(&api.field))) { \
-        code = -1; return false; \
+    code = resolve(module, symbol, reinterpret_cast<void**>(&api.field)); \
+    if (code < 0) { \
+        stage = 3; return false; \
     }
     VD2_RESOLVE(queryCompute, "sceVideodec2QueryComputeMemoryInfo");
     VD2_RESOLVE(allocateQueue, "sceVideodec2AllocateComputeQueue");
@@ -240,16 +252,18 @@ void* VideoDec2Probe::threadEntry(void* value) {
 
 void VideoDec2Probe::decodeLoop() {
     Api api;
-    if (!loadApi(api, errorCode_)) { errorStage_ = 2; state_ = State::Failed; return; }
+    if (!loadApi(api, errorStage_, errorCode_)) {
+        state_ = State::Failed; return;
+    }
     std::vector<uint8_t> stream;
-    if (!readFile(path_, stream)) { errorStage_ = 3; errorCode_ = -1; state_ = State::Failed; return; }
+    if (!readFile(path_, stream)) { errorStage_ = 10; errorCode_ = -1; state_ = State::Failed; return; }
     const std::vector<size_t> accessUnits = findAccessUnits(stream);
-    if (accessUnits.size() < 3) { errorStage_ = 4; errorCode_ = -1; state_ = State::Failed; return; }
+    if (accessUnits.size() < 3) { errorStage_ = 11; errorCode_ = -1; state_ = State::Failed; return; }
     // Videodec2 reads access units from CPU/GPU coherent Onion memory. A
     // normal std::vector is not a valid source buffer on retail hardware.
     DirectBlock inputBlock;
     if (!allocateDirect(stream.size(), 0, inputBlock)) {
-        errorStage_ = 5; errorCode_ = -1; state_ = State::Failed; return;
+        errorStage_ = 12; errorCode_ = -1; state_ = State::Failed; return;
     }
     std::memcpy(inputBlock.address, stream.data(), stream.size());
     stream.clear();
@@ -257,11 +271,11 @@ void VideoDec2Probe::decodeLoop() {
     ComputeMemory compute = {}; compute.thisSize = sizeof(compute);
     errorCode_ = api.queryCompute(&compute);
     if (errorCode_ < 0) {
-        releaseDirect(inputBlock); errorStage_ = 6; state_ = State::Failed; return;
+        releaseDirect(inputBlock); errorStage_ = 13; state_ = State::Failed; return;
     }
     DirectBlock computeBlock;
     if (!allocateDirect(compute.cpuGpuMemorySize, 0, computeBlock)) {
-        releaseDirect(inputBlock); errorStage_ = 7; errorCode_ = -1;
+        releaseDirect(inputBlock); errorStage_ = 14; errorCode_ = -1;
         state_ = State::Failed; return;
     }
     compute.cpuGpuMemory = computeBlock.address;
@@ -274,7 +288,7 @@ void VideoDec2Probe::decodeLoop() {
     errorCode_ = api.allocateQueue(&computeConfig, &compute, &queue);
     if (errorCode_ < 0) {
         releaseDirect(computeBlock); releaseDirect(inputBlock);
-        errorStage_ = 8; state_ = State::Failed; return;
+        errorStage_ = 15; state_ = State::Failed; return;
     }
 
     DecoderConfig config = {};
@@ -296,7 +310,7 @@ void VideoDec2Probe::decodeLoop() {
     errorCode_ = api.queryDecoder(&config, &memory);
     if (errorCode_ < 0) {
         api.releaseQueue(queue); releaseDirect(computeBlock);
-        releaseDirect(inputBlock); errorStage_ = 9; state_ = State::Failed; return;
+        releaseDirect(inputBlock); errorStage_ = 16; state_ = State::Failed; return;
     }
     void* cpuMemory = nullptr;
     if (posix_memalign(&cpuMemory, 0x4000, memory.cpuMemorySize) != 0)
@@ -309,7 +323,7 @@ void VideoDec2Probe::decodeLoop() {
     if (!allocations) {
         free(cpuMemory); releaseDirect(gpuBlock); releaseDirect(sharedBlock);
         releaseDirect(frameBlock); api.releaseQueue(queue); releaseDirect(computeBlock);
-        releaseDirect(inputBlock); errorStage_ = 10; errorCode_ = -1;
+        releaseDirect(inputBlock); errorStage_ = 17; errorCode_ = -1;
         state_ = State::Failed; return;
     }
     std::memset(cpuMemory, 0, memory.cpuMemorySize);
@@ -318,7 +332,7 @@ void VideoDec2Probe::decodeLoop() {
     memory.cpuGpuMemory = sharedBlock.address;
     void* decoder = nullptr;
     errorCode_ = api.createDecoder(&config, &memory, &decoder);
-    if (errorCode_ < 0) errorStage_ = 11;
+    if (errorCode_ < 0) errorStage_ = 18;
     if (errorCode_ >= 0) {
         state_ = State::Decoding;
         const uint64_t start = sceKernelGetProcessTime();
@@ -339,7 +353,7 @@ void VideoDec2Probe::decodeLoop() {
             frame.frameBufferSize = memory.maxFrameBufferSize;
             OutputInfo output = {}; output.thisSize = sizeof(output);
             errorCode_ = api.decode(decoder, &input, &frame, &output);
-            if (errorCode_ < 0) { errorStage_ = 12; state_ = State::Failed; break; }
+            if (errorCode_ < 0) { errorStage_ = 19; state_ = State::Failed; break; }
             ++frameIndex;
             if (output.isValid) {
                 ++decodedFrames_;

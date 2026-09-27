@@ -121,6 +121,10 @@ direct Videodec2 GPU benchmark. That benchmark bypasses AVPlayer and MP4
 demuxing, feeds packaged Annex-B H.264 access units from coherent Onion memory,
 and reports the raw 1080p hardware-decoder rate. It is decode-only and does not
 install firmware-specific YUV VideoOut patches, keeping the 13.02 test safe.
+Version 2.81 registers the internal VdecCore dependency and retries Videodec2
+by sandbox-visible module name when firmware rejects its absolute path. It also
+joins AVPlayer's non-blocking frame worker before Stop/Close, preventing the
+frame-query versus teardown race observed when leaving player modes 1 and 2.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies
