@@ -646,9 +646,15 @@ void drawStreams(
     snprintf(count, sizeof(count), "%d SOURCES FOUND",
         static_cast<int>(streams.size()));
     scene.DrawText(1470, 197, count, text, 2);
-    for (int index = 0; index < static_cast<int>(streams.size()) && index < 6;
-         ++index) {
-        const int y = 300 + index * 92;
+    constexpr int visibleRows = 6;
+    const int maximumStart = std::max(0,
+        static_cast<int>(streams.size()) - visibleRows);
+    const int firstVisible = std::min(maximumStart,
+        std::max(0, focusedStream - visibleRows + 1));
+    for (int row = 0; row < visibleRows; ++row) {
+        const int index = firstVisible + row;
+        if (index >= static_cast<int>(streams.size())) break;
+        const int y = 300 + row * 92;
         const bool selected = index == focusedStream;
         scene.DrawRoundedRectangle(120, y, 1680, 72, 18,
             selected ? focus : panel);
@@ -666,9 +672,74 @@ void drawStreams(
             stream.url.empty() ? "TORRENT - COMPANION REQUIRED" : "DIRECT HTTPS",
             selected ? background : (stream.url.empty() ? muted : text), 2);
     }
+    if (firstVisible > 0)
+        scene.DrawText(1840, 290, "^", focus, 3);
+    if (firstVisible + visibleRows < static_cast<int>(streams.size()))
+        scene.DrawText(1840, 825, "v", focus, 3);
+    char position[48];
+    snprintf(position, sizeof(position), "%d / %d", focusedStream + 1,
+        static_cast<int>(streams.size()));
+    scene.DrawText(1720, 875, position, muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
     drawButtonHint(scene, 1590, 1020, 'X', "PLAY / INSPECT");
+}
+
+void drawStreamProgress(Scene2D& scene, int stage, uint64_t downloaded,
+        uint64_t expected, uint64_t startedAt, int nativeError) {
+    const Color background = {18, 18, 24};
+    const Color panel = {35, 35, 46};
+    const Color purple = {123, 91, 214};
+    const Color focus = {196, 174, 255};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    drawBrand(scene, text);
+    scene.DrawRoundedRectangle(260, 240, 1400, 570, 34, panel);
+    const char* stageName = stage <= 1 ? "CONNECTING TO COMPANION" :
+        (stage == 2 ? "COMPANION IS RESOLVING TORRENT" :
+        (stage == 3 ? "DOWNLOADING VIDEO TO PS4 CACHE" :
+        (stage == 4 ? "PREPARING H.264 VIDEO" : "STARTING PLAYER")));
+    scene.DrawText(360, 325, stageName, text, 4);
+    const uint64_t elapsedUs = startedAt > 0
+        ? sceKernelGetProcessTime() - startedAt : 0;
+    const uint64_t speed = elapsedUs > 0
+        ? downloaded * 1000000ULL / elapsedUs : 0;
+    char transfer[192];
+    if (expected > 0) {
+        snprintf(transfer, sizeof(transfer),
+            "%llu.%01llu MB / %llu.%01llu MB     %llu KB/s",
+            static_cast<unsigned long long>(downloaded / 1048576),
+            static_cast<unsigned long long>((downloaded % 1048576) * 10 / 1048576),
+            static_cast<unsigned long long>(expected / 1048576),
+            static_cast<unsigned long long>((expected % 1048576) * 10 / 1048576),
+            static_cast<unsigned long long>(speed / 1024));
+    } else {
+        snprintf(transfer, sizeof(transfer),
+            "%llu.%01llu MB RECEIVED     %llu KB/s     %llus ELAPSED",
+            static_cast<unsigned long long>(downloaded / 1048576),
+            static_cast<unsigned long long>((downloaded % 1048576) * 10 / 1048576),
+            static_cast<unsigned long long>(speed / 1024),
+            static_cast<unsigned long long>(elapsedUs / 1000000));
+    }
+    scene.DrawText(360, 445, transfer, focus, 3);
+    scene.DrawRoundedRectangle(360, 535, 1200, 28, 14, background);
+    int progress = 0;
+    if (expected > 0)
+        progress = static_cast<int>(std::min<uint64_t>(1200,
+            downloaded * 1200 / expected));
+    else
+        progress = static_cast<int>((elapsedUs / 15000) % 260) + 180;
+    scene.DrawRoundedRectangle(360, 535, progress, 28, 14, purple);
+    scene.DrawText(360, 625,
+        "FIRST PLAY MAY TAKE TIME WHILE THE TORRENT FINDS PEERS",
+        muted, 2);
+    if (nativeError != 0) {
+        char error[64];
+        snprintf(error, sizeof(error), "NETWORK CODE 0x%08x",
+            static_cast<unsigned int>(nativeError));
+        scene.DrawText(360, 680, error, muted, 2);
+    }
 }
 
 void drawDecodedPreview(
@@ -1057,9 +1128,24 @@ std::vector<std::string> addonTransportUrls(const std::string& json) {
     return urls;
 }
 
+struct DownloadProgress {
+    std::atomic<int> stage{0};
+    std::atomic<uint64_t> downloaded{0};
+    std::atomic<uint64_t> expected{0};
+    std::atomic<int> nativeError{0};
+    uint64_t startedAt = 0;
+};
+
 int downloadUrlToFile(const char* url, const std::string& path,
-        size_t maximumBytes) {
+        size_t maximumBytes, DownloadProgress* progress = nullptr) {
     if (!url || !initializeHttp()) return -1;
+    if (progress) {
+        progress->stage.store(1, std::memory_order_release);
+        progress->downloaded.store(0, std::memory_order_release);
+        progress->expected.store(0, std::memory_order_release);
+        progress->nativeError.store(0, std::memory_order_release);
+        progress->startedAt = sceKernelGetProcessTime();
+    }
     const std::string temporary = path + ".part";
     FILE* output = fopen(temporary.c_str(), "wb");
     if (!output) return -2;
@@ -1067,16 +1153,41 @@ int downloadUrlToFile(const char* url, const std::string& path,
         "StremioPS4/3.00", ORBIS_HTTP_VERSION_1_1, 1);
     if (templateId < 0) { fclose(output); remove(temporary.c_str()); return -3; }
     sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
-    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
-    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
+    // A torrent companion may need substantially longer than an ordinary API
+    // request to discover peers and make the first media file available.
+    constexpr uint32_t streamTimeoutUsec = 120 * 1000 * 1000;
+    sceHttpSetConnectTimeOut(templateId, streamTimeoutUsec);
+    sceHttpSetSendTimeOut(templateId, streamTimeoutUsec);
     int connectionId = sceHttpCreateConnectionWithURL(templateId, url, false);
     int requestId = connectionId >= 0 ? sceHttpCreateRequestWithURL(
         connectionId, ORBIS_METHOD_GET, url, 0) : -1;
     int result = -4;
     size_t total = 0;
-    if (requestId >= 0 && sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
+    if (requestId < 0) {
+        if (progress) progress->nativeError.store(
+            connectionId < 0 ? connectionId : requestId,
+            std::memory_order_release);
+        result = -10;
+    } else {
+        if (progress) progress->stage.store(2, std::memory_order_release);
+        const int sendResult = sceHttpSendRequest(requestId, nullptr, 0);
+        if (sendResult < 0) {
+            if (progress) progress->nativeError.store(
+                sendResult, std::memory_order_release);
+            result = -11;
+        } else {
         int status = 0;
         if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
+            if (progress) {
+                int lengthType = 0;
+                size_t contentLength = 0;
+                if (sceHttpGetResponseContentLength(requestId, &lengthType,
+                        &contentLength) >= 0 &&
+                    lengthType == ORBIS_HTTP_CONTENTLEN_EXIST)
+                    progress->expected.store(
+                        contentLength, std::memory_order_release);
+                progress->stage.store(3, std::memory_order_release);
+            }
             // OpenOrbis worker threads have a much smaller default stack than
             // desktop pthreads. A previous 64 KiB local buffer exhausted it
             // as soon as a torrent-backed download started on real hardware.
@@ -1091,9 +1202,17 @@ int downloadUrlToFile(const char* url, const std::string& path,
                     result = -6; break;
                 }
                 total += static_cast<size_t>(bytes);
+                if (progress) progress->downloaded.store(
+                    total, std::memory_order_release);
             }
             if (!total && result == 0) result = -7;
         } else if (status > 0) result = -status;
+        else {
+            if (progress) progress->nativeError.store(
+                status, std::memory_order_release);
+            result = -12;
+        }
+        }
     }
     if (requestId >= 0) sceHttpDeleteRequest(requestId);
     if (connectionId >= 0) sceHttpDeleteConnection(connectionId);
@@ -1423,6 +1542,7 @@ struct StreamPrepareJob {
     bool sourceReused = false;
     bool demuxReused = false;
     Mp4MediaInfo media;
+    DownloadProgress progress;
 };
 
 struct AccountSyncJob {
@@ -1490,17 +1610,23 @@ void* streamPrepareEntry(void* argument) {
         source.st_size > 16;
     if (!job->sourceReused) {
         const int downloaded = downloadUrlToFile(job->url.c_str(),
-            job->sourcePath, kMaximumStreamBytes);
+            job->sourcePath, kMaximumStreamBytes, &job->progress);
         if (downloaded < 0) job->result = downloaded;
+    } else {
+        job->progress.startedAt = sceKernelGetProcessTime();
+        job->progress.stage.store(4, std::memory_order_release);
     }
     job->demuxReused = job->result == 0 &&
         stat(job->annexBPath.c_str(), &elementary) == 0 &&
         elementary.st_size > 16 && job->sourceReused;
     if (job->result == 0 && !job->demuxReused) {
+        job->progress.stage.store(4, std::memory_order_release);
         const int demux = demuxMp4AvcToAnnexB(
             job->sourcePath, job->annexBPath, job->media);
         if (demux != 0) job->result = 100 + demux;
     }
+    if (job->result == 0)
+        job->progress.stage.store(5, std::memory_order_release);
     job->completed.store(true, std::memory_order_release);
     job->running.store(false, std::memory_order_release);
     return nullptr;
@@ -1933,9 +2059,12 @@ int main() {
                 notify(failure);
             } else {
                 char failure[128];
+                const int nativeError = streamJob.progress.nativeError.load(
+                    std::memory_order_acquire);
                 snprintf(failure, sizeof(failure),
-                    "Stremio: stream download failed at stage %d",
-                    -streamJob.result);
+                    "Stremio: stream failed stage %d code 0x%08x",
+                    -streamJob.result,
+                    static_cast<unsigned int>(nativeError));
                 notify(failure);
             }
         }
@@ -2254,6 +2383,15 @@ int main() {
                     streamJob.annexBPath = cachePath("video", cacheKey, "h264");
                     streamJob.result = 0;
                     streamJob.media = {};
+                    streamJob.progress.stage.store(0,
+                        std::memory_order_release);
+                    streamJob.progress.downloaded.store(0,
+                        std::memory_order_release);
+                    streamJob.progress.expected.store(0,
+                        std::memory_order_release);
+                    streamJob.progress.nativeError.store(0,
+                        std::memory_order_release);
+                    streamJob.progress.startedAt = sceKernelGetProcessTime();
                     streamJob.completed.store(false, std::memory_order_release);
                     streamJob.running.store(true, std::memory_order_release);
                     pthread_attr_t streamAttributes;
@@ -2483,6 +2621,14 @@ int main() {
                 notify(timing);
                 playbackTimingReported = true;
             }
+        } else if (streamJob.running.load(std::memory_order_acquire)) {
+            staticScreenKey = ~0ull;
+            drawStreamProgress(scene,
+                streamJob.progress.stage.load(std::memory_order_acquire),
+                streamJob.progress.downloaded.load(std::memory_order_acquire),
+                streamJob.progress.expected.load(std::memory_order_acquire),
+                streamJob.progress.startedAt,
+                streamJob.progress.nativeError.load(std::memory_order_acquire));
         } else if (streamVisible) {
             staticScreenKey = ~0ull;
             drawStreams(scene, details, streams, focusedStream);

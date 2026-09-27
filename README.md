@@ -161,6 +161,14 @@ torrent descriptors in the native stream picker. Stremio addons remain remote
 HTTP services; the client never downloads or executes third-party addon code.
 Decoded audio is not implemented yet.
 
+Version 3.11 makes addon stream results a true scrolling viewport, including
+position and more-results indicators. Torrent and HTTPS selection now opens a
+live preparation screen with connection/resolution stage, received and total
+megabytes when available, transfer speed, elapsed time, and demux status. The
+companion response timeout is extended from eight seconds to two minutes for
+initial peer discovery, and failures retain the native PS4 network error code
+instead of collapsing request creation and response waiting into stage 4.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.
