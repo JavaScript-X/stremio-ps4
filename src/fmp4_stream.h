@@ -6,6 +6,8 @@
 
 struct Fmp4VideoConfig {
     uint8_t nalLengthBytes = 0;
+    uint32_t timescale = 0;
+    uint32_t defaultSampleDuration = 0;
     std::vector<std::vector<uint8_t>> parameterSets;
 };
 

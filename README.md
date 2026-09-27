@@ -225,6 +225,15 @@ picture buffer and eight output surfaces for reordered B-frames in streaming
 encodes. AudioOut now treats `sceAudioOutOpen`, rather than the unreliable
 13.xx HEN initialization status, as the authoritative result of the test.
 
+Version 3.60 moves the catalog closer to Stremio for Android TV with a darker
+cinema surface, selected-title hero heading, content breadcrumbs, rounded
+search/status pill, recommendation row label, and stable selected-poster badge.
+The audio test now follows OpenOrbis' reference exactly by opening the main
+port as the system user (`0xFF`). Segmented playback extracts each fMP4
+sample's decode timestamp and composition offset, writes a timing sidecar, and
+passes the true DTS/PTS values to Videodec2 so B-frames are presented in the
+intended order instead of visibly stepping backward and forward.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

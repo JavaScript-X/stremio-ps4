@@ -274,8 +274,8 @@ void drawHardwareProbe(
     int indicatorX,
     int animationFrame,
     int catalogMotion) {
-    const Color background = {18, 18, 24};
-    const Color header = {29, 29, 39};
+    const Color background = {11, 10, 17};
+    const Color header = {24, 22, 33};
     const Color stremioPurple = {123, 91, 214};
     const Color cardMuted = {35, 35, 46};
     const Color focus = {196, 174, 255};
@@ -283,7 +283,6 @@ void drawHardwareProbe(
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
-    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
     const int cardX[] = {300, 700, 1100, 1500};
     const int cardY = 260 + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
@@ -299,6 +298,9 @@ void drawHardwareProbe(
             // poster artwork and costs redraw work on every catalog frame.
             scene.DrawRoundedRectangle(x - 9, rowY - 9,
                 cardWidth + 18, cardHeight + 18, 24, focus);
+            scene.DrawRoundedRectangle(x + 16, rowY + 16, 112, 38, 19,
+                stremioPurple);
+            scene.DrawText(x + 34, rowY + 25, "SELECTED", text, 1);
         }
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
@@ -352,20 +354,26 @@ void drawHardwareProbe(
     // outgoing cards disappear behind it instead of crossing the top menu.
     scene.DrawRectangle(250, 0, kWidth - 250, 240, background);
     scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
-    scene.DrawText(300, 55, "DISCOVER", mutedText, 2);
-    scene.DrawText(300, 100,
-        activeTab == 3 ? "SEARCH RESULTS" :
-        (catalogType == "series" ? "TOP SERIES" :
-        (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
-        text, 5);
+    scene.DrawText(300, 40,
+        catalogType == "series" ? "SERIES / POPULAR" :
+        (catalogType == "publicdomain" ? "PUBLIC DOMAIN / FEATURED" :
+        (activeTab == 3 ? "SEARCH / RESULTS" : "MOVIES / POPULAR")),
+        stremioPurple, 2);
+    const int selectedIndex = page * 4 + focusedCard;
+    std::string featured = selectedIndex < static_cast<int>(items.size())
+        ? items[selectedIndex].name : "Discover something to watch";
+    if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
+    scene.DrawText(300, 82, featured.c_str(), text, 5);
+    scene.DrawText(300, 155,
+        "Browse with the D-pad or L3 stick", mutedText, 2);
     char pageText[64];
-    snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
+    snprintf(pageText, sizeof(pageText), "PAGE %d  /  %d TITLES", page + 1,
         static_cast<int>(items.size()));
-    scene.DrawText(1580, 150, pageText, mutedText, 2);
+    scene.DrawRoundedRectangle(1510, 46, 330, 62, 31, Color{35, 32, 47});
+    scene.DrawText(1550, 66, pageText, mutedText, 2);
+    scene.DrawText(300, 215, "Recommended for you", text, 3);
     scene.DrawText(300, 740, status.c_str(), mutedText, 2);
     scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
-    const int shimmerX = (animationFrame * 7) % (kWidth + 180) - 180;
-    scene.DrawRectangle(shimmerX, 998, 180, 3, stremioPurple);
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
     drawStickHint(scene, 300, 1015, "NAVIGATE");
@@ -472,7 +480,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "CLEAR SEARCH QUERY",
         useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
-        "ABOUT STREMIO  v3.50"};
+        "ABOUT STREMIO  v3.60"};
     drawSettingsRows(scene, rows, 7, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -922,12 +930,14 @@ void notify(const char* message) {
     sceSysUtilSendSystemNotificationWithText(222, message);
 }
 
-int playAudioOutputTest(int userId) {
+int playAudioOutputTest(int, int& failureStage) {
+    failureStage = 1;
     static bool initialized = false;
     if (!initialized) {
         // Some HEN builds report 0x809b0001 when the internal PRX is already
         // resident. That loader status is not an AudioOut failure.
-        sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_AUDIOOUT);
+        // The OpenOrbis audio reference links AudioOut directly and does not
+        // register its internal sysmodule first.
         // 13.xx HEN can return the loader-domain 0x809b0001 even while the
         // service is usable. sceAudioOutOpen supplies the authoritative error.
         sceAudioOutInit();
@@ -935,10 +945,10 @@ int playAudioOutputTest(int userId) {
     }
     constexpr int frames = 256;
     constexpr int rate = 48000;
-    const int handle = sceAudioOutOpen(userId,
+    const int handle = sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,
         ORBIS_AUDIO_OUT_PORT_TYPE_MAIN, 0, frames, rate,
         ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
-    if (handle <= 0) return handle;
+    if (handle <= 0) { failureStage = 2; return handle; }
     int16_t samples[frames * 2];
     double phase = 0.0;
     int result = 0;
@@ -952,10 +962,12 @@ int playAudioOutputTest(int userId) {
             phase += 6.283185307179586 * frequency / rate;
             if (phase >= 6.283185307179586) phase -= 6.283185307179586;
         }
+        sceAudioOutOutput(handle, nullptr);
         result = sceAudioOutOutput(handle, samples);
-        if (result < 0) break;
+        if (result < 0) { failureStage = 3; break; }
     }
     sceAudioOutClose(handle);
+    if (result >= 0) failureStage = 0;
     return result;
 }
 
@@ -2597,11 +2609,14 @@ int main() {
                     settingsSelection = 3;
                 } else if (settingsPage == 0 && settingsSelection == 2) {
                     notify("Stremio: playing 48 kHz stereo audio test");
-                    const int audioResult = playAudioOutputTest(userId);
+                    int audioFailureStage = 0;
+                    const int audioResult = playAudioOutputTest(
+                        userId, audioFailureStage);
                     if (audioResult < 0) {
                         char failure[96];
                         snprintf(failure, sizeof(failure),
-                            "Stremio: audio output failed 0x%08x",
+                            "Stremio: audio stage %d failed 0x%08x",
+                            audioFailureStage,
                             static_cast<unsigned int>(audioResult));
                         notify(failure);
                     } else {

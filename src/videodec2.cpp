@@ -312,6 +312,16 @@ void VideoDec2Probe::decodeLoop() {
     const std::vector<size_t> accessUnits = findAccessUnits(stream);
     if (accessUnits.size() < 3) { errorStage_ = 11; errorCode_ = -1; state_ = State::Failed; return; }
     durationMs_ = (accessUnits.size() - 1) * 1000 / 24;
+    struct SampleTime { uint64_t pts; uint64_t dts; };
+    std::vector<SampleTime> sampleTimes;
+    FILE* timing = std::fopen((path_ + ".pts").c_str(), "rb");
+    if (timing) {
+        SampleTime value = {};
+        while (std::fread(&value, sizeof(value), 1, timing) == 1)
+            sampleTimes.push_back(value);
+        std::fclose(timing);
+        if (sampleTimes.size() + 1 < accessUnits.size()) sampleTimes.clear();
+    }
     uint32_t avcProfile = 66, avcLevel = 40;
     inspectAvcConfiguration(stream, avcProfile, avcLevel);
     // Videodec2 reads access units from CPU/GPU coherent Onion memory. A
@@ -408,8 +418,10 @@ void VideoDec2Probe::decodeLoop() {
             input.auData = static_cast<uint8_t*>(inputBlock.address) +
                 accessUnits[index];
             input.auSize = accessUnits[index + 1] - accessUnits[index];
-            input.ptsData = index * 1000 / 24;
-            input.dtsData = input.ptsData;
+            input.ptsData = sampleTimes.empty()
+                ? index * 1000000 / 24 : sampleTimes[index].pts;
+            input.dtsData = sampleTimes.empty()
+                ? input.ptsData : sampleTimes[index].dts;
             FrameBuffer frame = {};
             frame.thisSize = sizeof(frame);
             frame.frameBuffer = static_cast<uint8_t*>(frameBlock.address) +
