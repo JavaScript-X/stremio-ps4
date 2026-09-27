@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,10 @@ struct StreamItem {
     std::string title;
     std::string url;
     std::string infoHash;
+    std::string fileName;
+    uint64_t videoSize = 0;
+    int seeders = -1;
+    int peers = -1;
     int fileIndex = -1;
 };
 

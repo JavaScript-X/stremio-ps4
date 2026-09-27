@@ -72,6 +72,26 @@ bool findIntField(const std::string& object, const char* field, int& value) {
     return found;
 }
 
+bool findUint64Field(
+    const std::string& object, const char* field, uint64_t& value) {
+    const std::string key = std::string("\"") + field + "\"";
+    size_t position = object.find(key);
+    if (position == std::string::npos) return false;
+    position = object.find(':', position + key.size());
+    if (position == std::string::npos) return false;
+    do { ++position; } while (position < object.size() &&
+        std::isspace(static_cast<unsigned char>(object[position])));
+    uint64_t parsed = 0;
+    bool found = false;
+    while (position < object.size() && std::isdigit(
+            static_cast<unsigned char>(object[position]))) {
+        found = true;
+        parsed = parsed * 10 + static_cast<uint64_t>(object[position++] - '0');
+    }
+    if (found) value = parsed;
+    return found;
+}
+
 bool findStringArrayField(
     const std::string& object, const char* field, std::string& joined) {
     const std::string key = std::string("\"") + field + "\"";
@@ -245,6 +265,10 @@ bool parseStreamItems(
             findStringField(object, "title", stream.title);
             findStringField(object, "url", stream.url);
             findStringField(object, "infoHash", stream.infoHash);
+            findStringField(object, "filename", stream.fileName);
+            findUint64Field(object, "videoSize", stream.videoSize);
+            findIntField(object, "seeders", stream.seeders);
+            findIntField(object, "peers", stream.peers);
             findIntField(object, "fileIdx", stream.fileIndex);
             if (!stream.url.empty() || !stream.infoHash.empty()) {
                 streams.push_back(stream);

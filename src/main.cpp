@@ -74,6 +74,7 @@ constexpr size_t kMaximumStreamBytes = size_t(1900) * 1024 * 1024;
 constexpr const char* kCompanionConfigPath = "/data/stremio-companion.txt";
 constexpr const char* kAuthKeyPath = "/data/stremio-auth-key.txt";
 constexpr const char* kAddonCollectionPath = "/data/stremio-addons.json";
+constexpr const char* kNavigationConfigPath = "/data/stremio-navigation.txt";
 constexpr const char* kLinkCreateUrl =
     "https://link.stremio.com/api/v2/create?type=Create";
 constexpr int kPosterWidth = 310;
@@ -90,6 +91,8 @@ PosterImage headerLogo;
 PosterImage creatorAvatar;
 volatile sig_atomic_t exitRequested = 0;
 bool imeDialogInitialized = false;
+bool useSideNavigation = true;
+bool navigationFocused = false;
 
 void requestExit(int) {
     exitRequested = 1;
@@ -109,25 +112,53 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {135, 130, 151};
-    scene.DrawRectangle(0, 0, 250, kHeight, rail);
-    drawBrand(scene, text);
+    const int railWidth = navigationFocused ? 250 : 96;
+    scene.DrawRectangle(0, 0, railWidth, kHeight, rail);
+    if (navigationFocused) drawBrand(scene, text);
+    else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
+        headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     const char* labels[] = {"MOVIES", "SERIES", "PUBLIC", "SEARCH", "SETTINGS"};
     const char* glyphs[] = {"M", "TV", "P", "?", "*"};
     for (int index = 0; index < kTopTabCount; ++index) {
         const int y = 170 + index * 104;
         if (index == activeTab) {
-            scene.DrawRoundedRectangle(22, y, 206, 72, 20, selected);
+            scene.DrawRoundedRectangle(22, y,
+                navigationFocused ? 206 : 58, 72, 20, selected);
             scene.DrawRectangle(22, y + 14, 6, 44, purple);
         }
         scene.DrawRoundedRectangle(44, y + 16, 40, 40, 12,
             index == activeTab ? purple : Color{38, 38, 51});
         scene.DrawText(54, y + 24, glyphs[index], text,
             index == 1 ? 1 : 2);
-        scene.DrawText(102, y + 24, labels[index],
+        if (navigationFocused) scene.DrawText(102, y + 24, labels[index],
             index == activeTab ? text : muted, 2);
     }
-    scene.DrawText(44, 890, "L1 / R1", muted, 2);
-    scene.DrawText(44, 930, "SWITCH SECTION", muted, 1);
+    if (navigationFocused) {
+        scene.DrawText(44, 890, "UP / DOWN", muted, 2);
+        scene.DrawText(44, 930, "CROSS OR RIGHT TO OPEN", muted, 1);
+    }
+}
+
+void drawTopNavigation(Scene2D& scene, int activeTab) {
+    const Color panel = {14, 14, 21};
+    const Color selected = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {135, 130, 151};
+    scene.DrawRectangle(0, 0, kWidth, 108, panel);
+    drawBrand(scene, text);
+    const int x[] = {520, 720, 920, 1240, 1450};
+    for (int index = 0; index < kTopTabCount; ++index) {
+        if (index == activeTab)
+            scene.DrawRoundedRectangle(x[index] - 22, 25, 184, 58, 18,
+                selected);
+        scene.DrawText(x[index], 43, kTopTabs[index],
+            index == activeTab ? text : muted, 2);
+    }
+}
+
+void drawNavigation(Scene2D& scene, int activeTab) {
+    if (useSideNavigation) drawSideNavigation(scene, activeTab);
+    else drawTopNavigation(scene, activeTab);
 }
 
 void drawLine(
@@ -320,7 +351,7 @@ void drawHardwareProbe(
     scene.DrawRectangle(shimmerX, 998, 180, 3, stremioPurple);
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
-    drawSideNavigation(scene, activeTab);
+    drawNavigation(scene, activeTab);
 }
 
 void drawSearch(Scene2D& scene, const std::string& query, int filter,
@@ -368,7 +399,7 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     drawButtonHint(scene, 1250, 1020, 'O', "CLEAR / BACK");
     drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
     drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
-    drawSideNavigation(scene, 3);
+    drawNavigation(scene, 3);
 }
 
 void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
@@ -381,7 +412,7 @@ void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
     scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
     scene.DrawText(300, 55, "STREMIO", muted, 2);
     scene.DrawText(300, 105, title, text, 5);
-    drawSideNavigation(scene, 4);
+    drawNavigation(scene, 4);
 }
 
 void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
@@ -419,8 +450,10 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "AUDIO OUTPUT TEST  48KHZ STEREO",
         "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.30"};
-    drawSettingsRows(scene, rows, 6, selected, indicatorX,
+        useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
+            "NAVIGATION LAYOUT  CLASSIC TOP BAR",
+        "ABOUT STREMIO  v3.40"};
+    drawSettingsRows(scene, rows, 7, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
 
@@ -652,14 +685,14 @@ void drawStreams(
     scene.FrameBufferFill(background);
     scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 235, 0);
     drawBrand(scene, text);
-    scene.DrawText(120, 180, "AVAILABLE STREAMS", text, 4);
-    scene.DrawText(120, 235, details.name.c_str(), muted, 2);
+    scene.DrawText(120, 145, "CHOOSE A STREAM", text, 4);
+    scene.DrawText(120, 205, details.name.c_str(), muted, 2);
     scene.DrawRoundedRectangle(1420, 175, 360, 70, 20, purple);
     char count[64];
     snprintf(count, sizeof(count), "%d SOURCES FOUND",
         static_cast<int>(streams.size()));
     scene.DrawText(1470, 197, count, text, 2);
-    constexpr int visibleRows = 6;
+    constexpr int visibleRows = 5;
     const int maximumStart = std::max(0,
         static_cast<int>(streams.size()) - visibleRows);
     const int firstVisible = std::min(maximumStart,
@@ -667,28 +700,56 @@ void drawStreams(
     for (int row = 0; row < visibleRows; ++row) {
         const int index = firstVisible + row;
         if (index >= static_cast<int>(streams.size())) break;
-        const int y = 300 + row * 92;
+        const int y = 270 + row * 126;
         const bool selected = index == focusedStream;
-        scene.DrawRoundedRectangle(120, y, 1680, 72, 18,
+        scene.DrawRoundedRectangle(120, y, 1680, 108, 20,
             selected ? focus : panel);
-        scene.DrawRoundedRectangle(145, y + 12, 48, 48, 14,
+        scene.DrawRoundedRectangle(145, y + 18, 58, 58, 16,
             selected ? purple : Color{52, 52, 68});
         char sourceNumber[8];
         snprintf(sourceNumber, sizeof(sourceNumber), "%02d", index + 1);
-        scene.DrawText(153, y + 23, sourceNumber, text, 2);
+        scene.DrawText(158, y + 36, sourceNumber, text, 2);
         const StreamItem& stream = streams[index];
-        const std::string label = !stream.name.empty() ? stream.name :
-            (!stream.title.empty() ? stream.title : "STREAM");
-        scene.DrawText(225, y + 23, label.c_str(),
+        // Addons commonly put resolution, codec, release, peers and size in
+        // title, while name is only the provider badge.
+        const std::string label = !stream.title.empty() ? stream.title :
+            (!stream.fileName.empty() ? stream.fileName :
+            (!stream.name.empty() ? stream.name : "STREAM"));
+        const std::vector<std::string> labelLines = wrapText(label, 52, 2);
+        if (!labelLines.empty()) scene.DrawText(230, y + 17,
+            labelLines[0].c_str(), selected ? background : text, 2);
+        if (labelLines.size() > 1) scene.DrawText(230, y + 49,
+            labelLines[1].c_str(), selected ? Color{55, 50, 70} : muted, 1);
+        std::string sizeText = "SIZE UNKNOWN";
+        if (stream.videoSize > 0) {
+            char size[48];
+            if (stream.videoSize >= 1073741824ULL)
+                snprintf(size, sizeof(size), "%llu.%01llu GB",
+                    static_cast<unsigned long long>(stream.videoSize / 1073741824ULL),
+                    static_cast<unsigned long long>((stream.videoSize % 1073741824ULL) * 10 / 1073741824ULL));
+            else snprintf(size, sizeof(size), "%llu MB",
+                static_cast<unsigned long long>(stream.videoSize / 1048576ULL));
+            sizeText = size;
+        }
+        std::string torrentInfo = stream.url.empty() ? "TORRENT   " :
+            "DIRECT HTTPS   ";
+        torrentInfo += sizeText;
+        if (stream.seeders >= 0)
+            torrentInfo += "   SEEDS " + std::to_string(stream.seeders);
+        if (stream.peers >= 0)
+            torrentInfo += "   PEERS " + std::to_string(stream.peers);
+        scene.DrawText(230, y + 78, torrentInfo.c_str(),
+            selected ? Color{55, 50, 70} : muted, 1);
+        scene.DrawText(1510, y + 39,
+            stream.name.empty() ?
+                (stream.url.empty() ? "COMPANION" : "DIRECT") :
+                shortTitle(stream.name).c_str(),
             selected ? background : text, 2);
-        scene.DrawText(1200, y + 23,
-            stream.url.empty() ? "TORRENT - COMPANION REQUIRED" : "DIRECT HTTPS",
-            selected ? background : (stream.url.empty() ? muted : text), 2);
     }
     if (firstVisible > 0)
         scene.DrawText(1840, 290, "^", focus, 3);
     if (firstVisible + visibleRows < static_cast<int>(streams.size()))
-        scene.DrawText(1840, 825, "v", focus, 3);
+        scene.DrawText(1840, 855, "v", focus, 3);
     char position[48];
     snprintf(position, sizeof(position), "%d / %d", focusedStream + 1,
         static_cast<int>(streams.size()));
@@ -838,9 +899,9 @@ void notify(const char* message) {
 int playAudioOutputTest(int userId) {
     static bool initialized = false;
     if (!initialized) {
-        const int module = sceSysmoduleLoadModuleInternal(
-            ORBIS_SYSMODULE_INTERNAL_AUDIOOUT);
-        if (module < 0) return module;
+        // Some HEN builds report 0x809b0001 when the internal PRX is already
+        // resident. That loader status is not an AudioOut failure.
+        sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_AUDIOOUT);
         const int init = sceAudioOutInit();
         if (init < 0 && static_cast<unsigned int>(init) !=
                 ORBIS_AUDIO_OUT_ERROR_ALREADY_INIT) return init;
@@ -865,7 +926,6 @@ int playAudioOutputTest(int userId) {
             phase += 6.283185307179586 * frequency / rate;
             if (phase >= 6.283185307179586) phase -= 6.283185307179586;
         }
-        sceAudioOutOutput(handle, nullptr);
         result = sceAudioOutOutput(handle, samples);
         if (result < 0) break;
     }
@@ -1726,9 +1786,17 @@ void* hlsSegmentEntry(void* argument) {
     job->result = 0;
     if (job->segmentUrls.empty()) {
         std::string playlist;
-        if (downloadUrl((job->baseUrl + "video0.m3u8").c_str(),
-                1024 * 1024, playlist) <= 0) {
-            job->result = 1;
+        int playlistResult = -1;
+        for (int attempt = 0; attempt < 6 && job->active; ++attempt) {
+            playlist.clear();
+            playlistResult = downloadUrl(
+                (job->baseUrl + "video0.m3u8").c_str(), 1024 * 1024,
+                playlist);
+            if (playlistResult > 0) break;
+            sceKernelUsleep(2000000);
+        }
+        if (playlistResult <= 0) {
+            job->result = 11;
         } else {
             size_t position = 0;
             while (position < playlist.size()) {
@@ -1745,7 +1813,7 @@ void* hlsSegmentEntry(void* argument) {
             if (job->segmentUrls.empty() ||
                 downloadUrl((job->baseUrl + "video0/init.mp4").c_str(),
                     1024 * 1024, init) <= 0 ||
-                !parseFmp4VideoConfig(init, job->config)) job->result = 2;
+                !parseFmp4VideoConfig(init, job->config)) job->result = 12;
         }
     }
     if (job->result == 0 && job->nextSegment >= 0 &&
@@ -1753,13 +1821,13 @@ void* hlsSegmentEntry(void* argument) {
         std::string segment;
         if (downloadUrl(job->segmentUrls[job->nextSegment].c_str(),
                 32 * 1024 * 1024, segment) <= 0) {
-            job->result = 3;
+            job->result = 13;
         } else {
             job->outputPath = job->nextSegment % 2
                 ? "/data/stremio-hls-b.h264"
                 : "/data/stremio-hls-a.h264";
             if (!convertFmp4VideoSegment(segment, job->config,
-                    job->outputPath, job->samples)) job->result = 4;
+                    job->outputPath, job->samples)) job->result = 14;
             else job->readySegment = job->nextSegment++;
         }
     } else if (job->result == 0) {
@@ -1900,6 +1968,9 @@ int main() {
     std::string companionAddress;
     readCachedFile(kCompanionConfigPath, 96, companionAddress);
     normalizeCompanionAddress(companionAddress);
+    std::string navigationConfig;
+    if (readCachedFile(kNavigationConfigPath, 16, navigationConfig))
+        useSideNavigation = navigationConfig != "top";
     AccountSyncJob accountJob;
     std::string authKey;
     std::string addonCollectionJson;
@@ -2197,10 +2268,20 @@ int main() {
                     hlsJob.segmentWaiting = true;
                 }
             } else if (hlsJob.active) {
-                char failure[96];
-                snprintf(failure, sizeof(failure),
-                    "Stremio: Videodec2 stream stage %d", hlsJob.result);
-                notify(failure);
+                if (hlsJob.result == 11)
+                    notify("Stremio: torrent unresolved - no peers responded; try another source");
+                else if (hlsJob.result == 12)
+                    notify("Stremio: stream codec is not H.264/AVC; download or choose another source");
+                else if (hlsJob.result == 13)
+                    notify("Stremio: segment network error; try another source");
+                else if (hlsJob.result == 14)
+                    notify("Stremio: unsupported fragmented MP4/AVC layout");
+                else {
+                    char failure[96];
+                    snprintf(failure, sizeof(failure),
+                        "Stremio: Videodec2 stream stage %d", hlsJob.result);
+                    notify(failure);
+                }
                 hlsJob.active = false;
             }
         }
@@ -2369,10 +2450,33 @@ int main() {
             videoDec2.state() == VideoDec2Probe::State::Idle;
         const bool catalogScreen = activeTab < 3 ||
             (activeTab == 3 && searchShowingResults);
-        if (shellVisible && (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
+        if (shellVisible && !navigationFocused &&
+            (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
             selectTab(activeTab + 1);
-        } else if (shellVisible && (pressed & ORBIS_PAD_BUTTON_L1) != 0) {
+        } else if (shellVisible && !navigationFocused &&
+            (pressed & ORBIS_PAD_BUTTON_L1) != 0) {
             selectTab(activeTab - 1);
+        }
+
+        if (shellVisible && useSideNavigation) {
+            const bool canEnterRail = catalogScreen ? focusedCard == 0 : true;
+            if (!navigationFocused && canEnterRail &&
+                (pressed & ORBIS_PAD_BUTTON_LEFT) != 0) {
+                navigationFocused = true;
+                staticScreenKey = ~0ull;
+            } else if (navigationFocused) {
+                if ((pressed & ORBIS_PAD_BUTTON_UP) != 0)
+                    selectTab(activeTab - 1);
+                if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0)
+                    selectTab(activeTab + 1);
+                if ((pressed & (ORBIS_PAD_BUTTON_RIGHT |
+                        ORBIS_PAD_BUTTON_CROSS)) != 0) {
+                    navigationFocused = false;
+                    staticScreenKey = ~0ull;
+                }
+            }
+        } else if (!useSideNavigation) {
+            navigationFocused = false;
         }
 
         const int tabTargets[kTopTabCount] = {350, 570, 790, 1130, 1380};
@@ -2385,7 +2489,8 @@ int main() {
             }
         }
 
-        if (shellVisible && activeTab == 3 && !searchShowingResults) {
+        if (shellVisible && !navigationFocused && activeTab == 3 &&
+            !searchShowingResults) {
             if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0)
                 searchFilter = (searchFilter + 2) % 3;
             if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0)
@@ -2411,7 +2516,7 @@ int main() {
             if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) searchQuery.clear();
             if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
                 loadSearchResults();
-        } else if (shellVisible && catalogScreen) {
+        } else if (shellVisible && !navigationFocused && catalogScreen) {
             if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
                 --focusedCard;
             if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
@@ -2444,8 +2549,8 @@ int main() {
                 catalogItems.clear();
                 catalogPosters.clear();
             }
-        } else if (shellVisible && activeTab == 4) {
-            const int maximumSelection = settingsPage == 0 ? 5 :
+        } else if (shellVisible && !navigationFocused && activeTab == 4) {
+            const int maximumSelection = settingsPage == 0 ? 6 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
@@ -2497,6 +2602,15 @@ int main() {
                     searchShowingResults = false;
                     notify("Stremio: search query cleared");
                 } else if (settingsPage == 0 && settingsSelection == 5) {
+                    useSideNavigation = !useSideNavigation;
+                    navigationFocused = false;
+                    writeCachedFile(kNavigationConfigPath,
+                        useSideNavigation ? "side" : "top");
+                    notify(useSideNavigation
+                        ? "Stremio: left sidebar navigation saved"
+                        : "Stremio: classic top navigation saved");
+                    staticScreenKey = ~0ull;
+                } else if (settingsPage == 0 && settingsSelection == 6) {
                     settingsPage = 3;
                     settingsSelection = 0;
                 } else if (settingsPage == 4) {
@@ -2542,7 +2656,8 @@ int main() {
         } else if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0 && previewVisible) {
             avPlayer.restart();
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
-            !detailVisible && !streamVisible && catalogScreen) {
+            !navigationFocused && !detailVisible && !streamVisible &&
+            catalogScreen) {
             const int selectedIndex = catalogPage * 4 + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
                 const int detailResult = fetchDetails(

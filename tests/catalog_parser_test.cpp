@@ -61,9 +61,12 @@ int main(int argc, char** argv) {
         return 3;
     }
     std::vector<StreamItem> streams;
-    const std::string streamJson = R"({"streams":[{"name":"1080p","title":"Public","infoHash":"abc","fileIdx":1},{"name":"Direct","url":"https://example.com/video.mp4"}]})";
+    const std::string streamJson = R"({"streams":[{"name":"Torrentio","title":"1080p AVC","infoHash":"abc","fileIdx":1,"seeders":42,"peers":51,"behaviorHints":{"filename":"movie.mp4","videoSize":1610612736}},{"name":"Direct","url":"https://example.com/video.mp4"}]})";
     if (!parseStreamItems(streamJson, streams, 8) || streams.size() != 2 ||
         streams[0].infoHash != "abc" || streams[0].fileIndex != 1 ||
+        streams[0].fileName != "movie.mp4" ||
+        streams[0].videoSize != 1610612736ULL ||
+        streams[0].seeders != 42 || streams[0].peers != 51 ||
         streams[1].url.empty()) return 5;
     std::cout << items.size() << " items; first=" << items[0].name << '\n';
     return 0;

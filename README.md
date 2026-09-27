@@ -206,6 +206,16 @@ to Annex-B, alternates two bounded cache slots, and downloads the next fragment
 while Videodec2 plays the current one. This removes Sony AVPlayer and its
 firmware-specific stage-4 URL failure from progressive torrent playback.
 
+Version 3.40 adds a focus-aware Android TV navigation rail that expands when
+selected and collapses over content. D-pad and left-stick Left enter it from
+the first catalog card, Up/Down select a section, and Right/Cross return to the
+page. Settings can switch between this rail and the classic top bar; the choice
+persists in app data. Stream cards now expose addon-supplied release details,
+file size, seed and peer counts before playback. Torrent resolution retries in
+the background and reports no-peers, network, codec, and fragmented-MP4
+failures separately. The AudioOut probe also tolerates an already-resident HEN
+module and no longer submits a null priming buffer.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.
