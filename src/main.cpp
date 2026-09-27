@@ -28,6 +28,7 @@
 #include "catalog.h"
 #include "poster.h"
 #include "videodec2.h"
+#include "mp4_demux.h"
 
 std::stringstream debugLogStream;
 
@@ -67,6 +68,7 @@ constexpr size_t kMaximumDemoVideoBytes = 16 * 1024 * 1024;
 constexpr size_t kLegalRemoteVideoBytes = 4372373;
 constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
+constexpr size_t kMaximumStreamBytes = 512 * 1024 * 1024;
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
 constexpr int kCatalogBatchSize = 8;
@@ -397,7 +399,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.90"};
+        "ABOUT STREMIO  v3.00"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -448,8 +450,16 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
     } else {
         scene.DrawRoundedRectangle(420, 870, 1080, 74, 18, panel);
         scene.DrawText(470, 895, metrics, text, 2);
+        const uint64_t duration = decoder.duration();
+        const int progress = duration ? static_cast<int>(
+            std::min<uint64_t>(1000, decoder.currentTime() * 1000 / duration)) : 0;
+        scene.DrawRoundedRectangle(460, 960, 1000, 12, 6, panel);
+        scene.DrawRoundedRectangle(460, 960, progress, 12, 6, purple);
     }
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
+    drawButtonHint(scene, 40, 1020, 'X',
+        decoder.paused() ? "RESUME" : "PAUSE");
+    drawButtonHint(scene, 310, 1020, 'T', "RESTART");
     drawButtonHint(scene, 1640, 1020, 'O', "STOP");
 }
 
@@ -916,6 +926,53 @@ int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
     return result;
 }
 
+int downloadUrlToFile(const char* url, const std::string& path,
+        size_t maximumBytes) {
+    if (!url || !initializeHttp()) return -1;
+    const std::string temporary = path + ".part";
+    FILE* output = fopen(temporary.c_str(), "wb");
+    if (!output) return -2;
+    int templateId = sceHttpCreateTemplate(httpContextId,
+        "StremioPS4/3.00", ORBIS_HTTP_VERSION_1_1, 1);
+    if (templateId < 0) { fclose(output); remove(temporary.c_str()); return -3; }
+    sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
+    int connectionId = sceHttpCreateConnectionWithURL(templateId, url, false);
+    int requestId = connectionId >= 0 ? sceHttpCreateRequestWithURL(
+        connectionId, ORBIS_METHOD_GET, url, 0) : -1;
+    int result = -4;
+    size_t total = 0;
+    if (requestId >= 0 && sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
+        int status = 0;
+        if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
+            char chunk[64 * 1024];
+            result = 0;
+            for (;;) {
+                const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
+                if (bytes < 0) { result = -5; break; }
+                if (!bytes) break;
+                if (total + static_cast<size_t>(bytes) > maximumBytes ||
+                    fwrite(chunk, 1, bytes, output) != static_cast<size_t>(bytes)) {
+                    result = -6; break;
+                }
+                total += static_cast<size_t>(bytes);
+            }
+            if (!total && result == 0) result = -7;
+        } else if (status > 0) result = -status;
+    }
+    if (requestId >= 0) sceHttpDeleteRequest(requestId);
+    if (connectionId >= 0) sceHttpDeleteConnection(connectionId);
+    sceHttpDeleteTemplate(templateId);
+    if (fclose(output) != 0 && result == 0) result = -8;
+    if (result == 0) {
+        remove(path.c_str());
+        if (rename(temporary.c_str(), path.c_str()) != 0) result = -9;
+    }
+    if (result != 0) remove(temporary.c_str());
+    return result == 0 ? static_cast<int>(total) : result;
+}
+
 int cacheLegalRemoteTrailer(bool& reused) {
     reused = false;
     struct stat fileInfo = {};
@@ -1170,6 +1227,42 @@ struct CatalogPageJob {
     std::vector<PosterImage> posters;
 };
 
+struct StreamPrepareJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    std::string url;
+    std::string sourcePath;
+    std::string annexBPath;
+    int result = 0;
+    bool sourceReused = false;
+    bool demuxReused = false;
+    Mp4MediaInfo media;
+};
+
+void* streamPrepareEntry(void* argument) {
+    StreamPrepareJob* job = static_cast<StreamPrepareJob*>(argument);
+    struct stat source = {}, elementary = {};
+    job->sourceReused = stat(job->sourcePath.c_str(), &source) == 0 &&
+        source.st_size > 16;
+    if (!job->sourceReused) {
+        const int downloaded = downloadUrlToFile(job->url.c_str(),
+            job->sourcePath, kMaximumStreamBytes);
+        if (downloaded < 0) job->result = downloaded;
+    }
+    job->demuxReused = job->result == 0 &&
+        stat(job->annexBPath.c_str(), &elementary) == 0 &&
+        elementary.st_size > 16 && job->sourceReused;
+    if (job->result == 0 && !job->demuxReused) {
+        const int demux = demuxMp4AvcToAnnexB(
+            job->sourcePath, job->annexBPath, job->media);
+        if (demux != 0) job->result = 100 + demux;
+    }
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
+
 void* catalogPageEntry(void* argument) {
     CatalogPageJob* job = static_cast<CatalogPageJob*>(argument);
     job->items.clear();
@@ -1302,6 +1395,7 @@ int main() {
 
     CatalogLoadJob catalogJobs[3];
     CatalogPageJob pageJob;
+    StreamPrepareJob streamJob;
     catalogJobs[0].type = "movie";
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
@@ -1489,6 +1583,38 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (streamJob.completed.exchange(false, std::memory_order_acq_rel)) {
+            pthread_join(streamJob.thread, nullptr);
+            if (streamJob.result == 0) {
+                char ready[160];
+                if (streamJob.media.width && streamJob.media.height) {
+                    snprintf(ready, sizeof(ready),
+                        "Stremio: cached H.264 %ux%u at %u.%02u fps",
+                        streamJob.media.width, streamJob.media.height,
+                        streamJob.media.fpsTimes100 / 100,
+                        streamJob.media.fpsTimes100 % 100);
+                } else {
+                    snprintf(ready, sizeof(ready),
+                        "Stremio: using cached H.264 elementary stream");
+                }
+                notify(ready);
+                streamVisible = false;
+                if (!videoDec2.start(streamJob.annexBPath.c_str()))
+                    notify("Stremio: Videodec2 worker could not start");
+            } else if (streamJob.result >= 100) {
+                char failure[128];
+                snprintf(failure, sizeof(failure),
+                    "Stremio: unsupported MP4/AVC, demux stage %d",
+                    streamJob.result - 100);
+                notify(failure);
+            } else {
+                char failure[128];
+                snprintf(failure, sizeof(failure),
+                    "Stremio: stream download failed at stage %d",
+                    -streamJob.result);
+                notify(failure);
+            }
+        }
         if (pageJob.completed.exchange(false, std::memory_order_acq_rel)) {
             pthread_join(pageJob.thread, nullptr);
             if (pageJob.result > 0 && pageJob.type == catalogType &&
@@ -1557,6 +1683,13 @@ int main() {
             } else {
                 DEBUGLOG << "Options pressed from shell; Home API disabled";
             }
+        }
+
+        if (videoDec2.state() != VideoDec2Probe::State::Idle) {
+            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0)
+                videoDec2.togglePause();
+            if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
+                videoDec2.restart();
         }
 
         const bool shellVisible =
@@ -1747,7 +1880,25 @@ int main() {
             if (stream.url.empty()) {
                 notify("Stremio: torrent stream needs the companion service");
             } else if (stream.url.compare(0, 8, "https://") == 0) {
-                notify("Stremio: HTTPS streams need the cache/companion bridge");
+                if (streamJob.running.load(std::memory_order_acquire)) {
+                    notify("Stremio: stream is already downloading");
+                } else {
+                    stopBackgroundForPlayback();
+                    streamJob.url = stream.url;
+                    streamJob.sourcePath = cachePath("media", stream.url, "mp4");
+                    streamJob.annexBPath = cachePath("video", stream.url, "h264");
+                    streamJob.result = 0;
+                    streamJob.media = {};
+                    streamJob.completed.store(false, std::memory_order_release);
+                    streamJob.running.store(true, std::memory_order_release);
+                    if (pthread_create(&streamJob.thread, nullptr,
+                            streamPrepareEntry, &streamJob) != 0) {
+                        streamJob.running.store(false, std::memory_order_release);
+                        notify("Stremio: stream worker could not start");
+                    } else {
+                        notify("Stremio: caching HTTPS stream in background...");
+                    }
+                }
             } else {
                 notify("Stremio: rejected non-HTTPS direct stream");
             }
@@ -2044,6 +2195,9 @@ int main() {
     if (pageWasRunning) pthread_cancel(pageJob.thread);
     if (pageWasRunning || pageJob.completed.load(std::memory_order_acquire))
         pthread_join(pageJob.thread, nullptr);
+    if (streamJob.running.load(std::memory_order_acquire) ||
+        streamJob.completed.load(std::memory_order_acquire))
+        pthread_join(streamJob.thread, nullptr);
     if (imeDialogInitialized &&
         sceImeDialogGetStatus() == ORBIS_DIALOG_STATUS_RUNNING) {
         sceImeDialogAbort();

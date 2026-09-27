@@ -170,7 +170,12 @@ Controller controls:
   the query; **Triangle** repeats it and **Circle** clears or returns from results.
 - The Settings tab contains the packaged and cached-HTTPS playback tests.
 - On a Public Domain detail page, **Cross** resolves addon streams. The stream
-  screen uses **Up/Down**, **Cross**, and **Circle**.
+  screen uses **Up/Down**, **Cross**, and **Circle**. Selecting a direct HTTPS
+  MP4 now downloads it incrementally to the persistent cache, demuxes its AVC
+  video track to Annex-B, and starts direct Videodec2 hardware playback.
+- Direct Videodec2 playback uses **Cross** to pause/resume, **Triangle** to
+  restart, and **Circle** to return. The player includes a progress bar and
+  live output/decode diagnostics.
 - **Circle** cancels an active AVPlayer probe.
 - After a successful decode, the video plays continuously as a centered
   preview. **Cross** pauses/resumes and **Circle** stops and returns to the shell.
@@ -182,9 +187,15 @@ Controller controls:
 | M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
 | M1 | Controller, HTTPS, and local H.264 decode proof | Validated on PS4 FW 13.02 |
 | M2 | Stremio login, catalogs, search and metadata | In progress |
-| M3 | Direct stream selection and playback | Planned |
+| M3 | Cached HTTPS MP4/AVC stream selection and Videodec2 playback | Console testing |
 | M4 | Companion Stremio server integration | Planned |
 | M5 | Library, progress sync, subtitles and settings | Planned |
+
+Version 3.00 intentionally supports direct HTTPS MP4 files with an H.264/AVC
+video track first. WebM, MKV, HEVC, DASH/HLS manifests, magnet links, audio
+playback, subtitles, and protected streams are detected as future compatibility
+work; they are not silently treated as supported. Cached media is capped at
+512 MiB per download.
 
 See [docs/architecture.md](docs/architecture.md) for the intended design and
 [docs/testing-m0.md](docs/testing-m0.md) for the first console test.

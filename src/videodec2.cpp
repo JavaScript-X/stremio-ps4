@@ -231,6 +231,24 @@ std::vector<size_t> findAccessUnits(const std::vector<uint8_t>& data) {
     offsets.push_back(data.size());
     return offsets;
 }
+
+void inspectAvcConfiguration(const std::vector<uint8_t>& data,
+        uint32_t& profile, uint32_t& level) {
+    profile = 66;
+    level = 40;
+    for (size_t index = 0; index + 8 < data.size(); ++index) {
+        size_t header = 0;
+        if (data[index] == 0 && data[index + 1] == 0 &&
+            data[index + 2] == 0 && data[index + 3] == 1) header = index + 4;
+        else if (data[index] == 0 && data[index + 1] == 0 &&
+            data[index + 2] == 1) header = index + 3;
+        if (header && (data[header] & 0x1f) == 7) {
+            profile = data[header + 1];
+            level = data[header + 3];
+            return;
+        }
+    }
+}
 }  // namespace
 
 VideoDec2Probe::VideoDec2Probe() {
@@ -243,7 +261,7 @@ VideoDec2Probe::~VideoDec2Probe() {
 
 bool VideoDec2Probe::start(const char* annexBPath) {
     stop();
-    path_ = annexBPath;
+    path_ = annexBPath ? annexBPath : "";
     state_ = State::Loading;
     errorStage_ = 0;
     errorCode_ = 0;
@@ -252,14 +270,22 @@ bool VideoDec2Probe::start(const char* annexBPath) {
     width_ = 0;
     height_ = 0;
     submittedAccessUnits_ = 0;
+    durationMs_ = 0;
     preview_.clear();
     previewWidth_ = 0;
     previewHeight_ = 0;
     deliveredFrame_ = 0;
     stopRequested_ = false;
+    paused_ = false;
     running_ = pthread_create(&thread_, nullptr, threadEntry, this) == 0;
     if (!running_) { state_ = State::Failed; errorStage_ = 1; return false; }
     return true;
+}
+
+void VideoDec2Probe::restart() {
+    const std::string path = path_;
+    stop();
+    start(path.c_str());
 }
 
 void VideoDec2Probe::stop() {
@@ -282,9 +308,12 @@ void VideoDec2Probe::decodeLoop() {
         state_ = State::Failed; return;
     }
     std::vector<uint8_t> stream;
-    if (!readFile(path_, stream)) { errorStage_ = 10; errorCode_ = -1; state_ = State::Failed; return; }
+    if (!readFile(path_.c_str(), stream)) { errorStage_ = 10; errorCode_ = -1; state_ = State::Failed; return; }
     const std::vector<size_t> accessUnits = findAccessUnits(stream);
     if (accessUnits.size() < 3) { errorStage_ = 11; errorCode_ = -1; state_ = State::Failed; return; }
+    durationMs_ = (accessUnits.size() - 1) * 1000 / 24;
+    uint32_t avcProfile = 66, avcLevel = 40;
+    inspectAvcConfiguration(stream, avcProfile, avcLevel);
     // Videodec2 reads access units from CPU/GPU coherent Onion memory. A
     // normal std::vector is not a valid source buffer on retail hardware.
     DirectBlock inputBlock;
@@ -321,10 +350,10 @@ void VideoDec2Probe::decodeLoop() {
     config.thisSize = sizeof(config);
     config.resourceType = 1;
     config.codecType = 1;
-    // The packaged direct test is Constrained Baseline Level 4.0. Matching
-    // the SPS avoids INVALID_SEQUENCE on firmware 13.02.
-    config.profile = 66;
-    config.maxLevel = 40;
+    // Match the actual SPS instead of imposing the original Baseline test
+    // profile on Main/High streams obtained from addons.
+    config.profile = avcProfile;
+    config.maxLevel = avcLevel;
     config.maxFrameWidth = 1920;
     config.maxFrameHeight = 1088;
     config.maxDpbFrameCount = 4;
@@ -362,9 +391,16 @@ void VideoDec2Probe::decodeLoop() {
     if (errorCode_ >= 0) {
         state_ = State::Decoding;
         const uint64_t start = sceKernelGetProcessTime();
+        uint64_t pausedUsec = 0;
         int frameIndex = 0;
         for (size_t index = 0; index + 1 < accessUnits.size() &&
              !stopRequested_; ++index) {
+            if (paused_) {
+                const uint64_t pauseStart = sceKernelGetProcessTime();
+                while (paused_ && !stopRequested_) sceKernelUsleep(16000);
+                pausedUsec += sceKernelGetProcessTime() - pauseStart;
+                if (stopRequested_) break;
+            }
             InputData input = {};
             input.thisSize = sizeof(input);
             input.auData = static_cast<uint8_t*>(inputBlock.address) +
@@ -430,7 +466,8 @@ void VideoDec2Probe::decodeLoop() {
                 if (decodedFrames_ == 1) state_ = State::Passed;
                 // Present at the stream cadence instead of finishing the
                 // complete 52-second clip as a 140 FPS benchmark.
-                const uint64_t target = start + decodedFrames_ * 1000000 / 24;
+                const uint64_t target = start + pausedUsec +
+                    decodedFrames_ * 1000000 / 24;
                 const uint64_t now = sceKernelGetProcessTime();
                 if (target > now) sceKernelUsleep(target - now);
             }
