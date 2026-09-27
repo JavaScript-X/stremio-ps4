@@ -242,6 +242,12 @@ pill rows instead of a large bright selection slab. Details gain a clear
 primary action, while the stream picker uses the same dark-purple focus and
 keeps all release information readable when selected.
 
+Version 3.71 is the performance hotfix for the six-card interface. Posters are
+decoded once at their exact 235x330 display size, next-row previews are cached
+at 211x297, and steady catalog, details, and stream-picker screens are rendered
+only into the two framebuffers when their state changes. Idle frames now flip
+the cached buffers without repeating CPU image scaling or text rasterization.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

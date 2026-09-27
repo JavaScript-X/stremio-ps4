@@ -77,8 +77,8 @@ constexpr const char* kAddonCollectionPath = "/data/stremio-addons.json";
 constexpr const char* kNavigationConfigPath = "/data/stremio-navigation.txt";
 constexpr const char* kLinkCreateUrl =
     "https://link.stremio.com/api/v2/create?type=Create";
-constexpr int kPosterWidth = 310;
-constexpr int kPosterHeight = 410;
+constexpr int kPosterWidth = 235;
+constexpr int kPosterHeight = 330;
 constexpr int kCatalogBatchSize = 8;
 constexpr int kCatalogPageSize = 6;
 constexpr int kTopTabCount = 5;
@@ -306,14 +306,12 @@ void drawHardwareProbe(
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
         if (posterReady && scalePercent == 100) {
-            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 18,
-                posters[itemIndex].pixels.data(), posters[itemIndex].width,
-                posters[itemIndex].height);
+            scene.BlitRgbMasked(x, rowY, posters[itemIndex].width,
+                posters[itemIndex].height, posters[itemIndex].pixels.data());
         } else if (posterReady && posters[itemIndex].previewValid()) {
-            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 18,
-                posters[itemIndex].previewPixels.data(),
-                posters[itemIndex].previewWidth,
-                posters[itemIndex].previewHeight);
+            scene.BlitRgbMasked(x, rowY, posters[itemIndex].previewWidth,
+                posters[itemIndex].previewHeight,
+                posters[itemIndex].previewPixels.data());
         } else {
             scene.DrawRoundedRectangle(x, rowY, cardWidth, cardHeight, 18,
                 stremioPurple);
@@ -482,7 +480,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "CLEAR SEARCH QUERY",
         useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
-        "ABOUT STREMIO  v3.70"};
+        "ABOUT STREMIO  v3.71"};
     drawSettingsRows(scene, rows, 7, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -656,8 +654,8 @@ void drawDetails(
     scene.DrawRoundedRectangle(90, 175, 410, 650, 30, panel);
     scene.DrawRoundedRectangle(124, 209, 322, 422, 22, purple);
     if (poster && poster->valid()) {
-        scene.BlitRgbRounded(130, 215, poster->width, poster->height, 18,
-            poster->pixels.data());
+        scene.BlitRgbScaledRounded(130, 215, 322, 422, 18,
+            poster->pixels.data(), poster->width, poster->height);
     }
     const std::string title = details.name.size() > 42
         ? details.name.substr(0, 39) + "..." : details.name;
@@ -1660,7 +1658,7 @@ int fetchPosters(
             decodePosterJpeg(
                 encoded, kPosterWidth, kPosterHeight, posters[index])) {
             if (!cached) writeCachedFile(stored, encoded);
-            preparePosterPresentation(posters[index], 18, 279, 369);
+            preparePosterPresentation(posters[index], 18, 211, 297);
             ++loaded;
         }
     }
@@ -3080,16 +3078,35 @@ int main() {
                 streamJob.progress.startedAt,
                 streamJob.progress.nativeError.load(std::memory_order_acquire));
         } else if (streamVisible) {
-            staticScreenKey = ~0ull;
-            drawStreams(scene, details, streams, focusedStream);
+            const uint64_t key = 0x5700000000000000ull |
+                (static_cast<uint64_t>(focusedStream) << 24) |
+                static_cast<uint32_t>(streams.size());
+            if (key != staticScreenKey) {
+                staticScreenKey = key;
+                staticScreenFrames = kFrameBuffers;
+            }
+            if (staticScreenFrames > 0) {
+                drawStreams(scene, details, streams, focusedStream);
+                --staticScreenFrames;
+            }
         } else if (detailVisible) {
-            staticScreenKey = ~0ull;
+            uint64_t key = 0x4400000000000000ull |
+                (static_cast<uint64_t>(detailEpisodeIndex) << 24) |
+                static_cast<uint32_t>(detailPosterIndex + 1);
+            key ^= stableHash(details.name);
+            if (key != staticScreenKey) {
+                staticScreenKey = key;
+                staticScreenFrames = kFrameBuffers;
+            }
             const PosterImage* poster =
                 detailPosterIndex >= 0 &&
                 detailPosterIndex < static_cast<int>(catalogPosters.size())
                 ? &catalogPosters[detailPosterIndex] : nullptr;
-            drawDetails(
-                scene, details, poster, catalogType, detailEpisodeIndex);
+            if (staticScreenFrames > 0) {
+                drawDetails(
+                    scene, details, poster, catalogType, detailEpisodeIndex);
+                --staticScreenFrames;
+            }
         } else if (activeTab == 3 && !searchShowingResults) {
             uint64_t key = 0x5300000000000000ull |
                 (static_cast<uint64_t>(indicatorX) << 24) |
@@ -3139,11 +3156,26 @@ int main() {
                 --staticScreenFrames;
             }
         } else {
-            staticScreenKey = ~0ull;
-            drawHardwareProbe(
-                scene, focusedCard, catalogPage, catalogType, catalogStatus,
-                catalogItems, catalogPosters, activeTab, indicatorX,
-                animationFrame, catalogMotion);
+            uint64_t key = 0x4300000000000000ull |
+                (static_cast<uint64_t>(activeTab) << 52) |
+                (static_cast<uint64_t>(catalogPage) << 32) |
+                (static_cast<uint64_t>(focusedCard) << 24) |
+                (static_cast<uint64_t>(displayedPosterCount) << 8) |
+                static_cast<uint8_t>(catalogMotion & 0xff);
+            key ^= stableHash(catalogStatus);
+            key ^= navigationFocused ? 0x100000ull : 0;
+            key ^= useSideNavigation ? 0x200000ull : 0;
+            if (key != staticScreenKey) {
+                staticScreenKey = key;
+                staticScreenFrames = kFrameBuffers;
+            }
+            if (staticScreenFrames > 0) {
+                drawHardwareProbe(
+                    scene, focusedCard, catalogPage, catalogType, catalogStatus,
+                    catalogItems, catalogPosters, activeTab, indicatorX,
+                    animationFrame, catalogMotion);
+                --staticScreenFrames;
+            }
         }
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
