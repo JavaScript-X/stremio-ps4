@@ -397,7 +397,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.83"};
+        "ABOUT STREMIO  v2.90"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -407,30 +407,26 @@ void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
         "SONY AVPLAYER + RGB PREVIEW",
         "SONY AVPLAYER DECODE-ONLY",
         "SONY AVPLAYER PERFORMANCE / LEGACY API",
-        "DIRECT VIDEODEC2 GPU / EXPERIMENTAL"};
+        "DIRECT VIDEODEC2 GPU / 1080P PLAYBACK"};
     drawSettingsRows(scene, rows, 4, selected, indicatorX,
         "PLAYBACK TESTS / PLAYER MODE", "SELECT");
 }
 
-void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder) {
+void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
+    const std::vector<uint32_t>& pixels, uint32_t previewWidth,
+    uint32_t previewHeight) {
     const Color background = {8, 8, 12};
     const Color panel = {29, 29, 39};
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
+    if (!pixels.empty() && previewWidth > 0 && previewHeight > 0)
+        scene.BlitRgbScaled(0, 0, kWidth, kHeight, pixels.data(),
+            previewWidth, previewHeight);
     scene.DrawVerticalFade(0, 0, kWidth, 220, panel, 235, 0);
     drawBrand(scene, text);
-    scene.DrawText(120, 190, "DIRECT VIDEODEC2 GPU BENCHMARK", text, 4);
-    scene.DrawRoundedRectangle(280, 315, 1360, 430, 34, panel);
-    scene.DrawRoundedRectangle(330, 370, 120, 120, 30, purple);
-    scene.DrawText(365, 405, "GPU", text, 3);
-    scene.DrawText(505, 370,
-        "H.264 BASELINE L4.0   1920x1080 / 24 FPS", text, 3);
-    scene.DrawText(505, 430,
-        "RAW ANNEX-B ACCESS UNITS - AVPLAYER BYPASSED", muted, 2);
-    scene.DrawText(505, 480,
-        "SAFE DECODE-ONLY MODE - NO FIRMWARE VIDEOOUT PATCHES", muted, 2);
+    scene.DrawText(120, 190, "DIRECT VIDEODEC2 GPU PLAYER", text, 4);
     char metrics[160];
     snprintf(metrics, sizeof(metrics),
         "OUTPUT %ux%u   AU %u   FRAMES %llu   DECODE %u.%u FPS",
@@ -439,10 +435,20 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder) {
         static_cast<unsigned long long>(decoder.decodedFrames()),
         decoder.measuredFpsTimesTen() / 10,
         decoder.measuredFpsTimesTen() % 10);
-    scene.DrawRoundedRectangle(505, 555, 1035, 90, 22, background);
-    scene.DrawText(545, 585, metrics, text, 2);
-    scene.DrawText(505, 680,
-        "TARGET: 24.0 FPS. THIS RESULT IS THE HARDWARE DECODER RATE.", purple, 2);
+    if (pixels.empty()) {
+        scene.DrawRoundedRectangle(280, 315, 1360, 430, 34, panel);
+        scene.DrawRoundedRectangle(330, 370, 120, 120, 30, purple);
+        scene.DrawText(365, 405, "GPU", text, 3);
+        scene.DrawText(505, 370,
+            "H.264 BASELINE L4.0   1920x1080 / 24 FPS", text, 3);
+        scene.DrawText(505, 430,
+            "INITIALIZING DIRECT HARDWARE PLAYBACK...", muted, 2);
+        scene.DrawRoundedRectangle(505, 555, 1035, 90, 22, background);
+        scene.DrawText(545, 585, metrics, text, 2);
+    } else {
+        scene.DrawRoundedRectangle(420, 870, 1080, 74, 18, panel);
+        scene.DrawText(470, 895, metrics, text, 2);
+    }
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 1640, 1020, 'O', "STOP");
 }
@@ -451,7 +457,7 @@ void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
     bool decodeOnly, bool legacyApi, bool directVideoDec2) {
     if (directVideoDec2) {
         const char* directRows[] = {
-            "1080P BASELINE L4.0 / RAW ANNEX-B / GPU DECODE-ONLY"};
+            "1080P BASELINE L4.0 / DIRECT GPU PLAYBACK"};
         drawSettingsRows(scene, directRows, 1, selected, indicatorX,
             "DIRECT VIDEODEC2 / SELECT TEST", "RUN");
         return;
@@ -1256,6 +1262,11 @@ int main() {
     uint32_t previewHeight = 0;
     uint32_t playbackSourceWidth = 0;
     uint32_t playbackSourceHeight = 0;
+    std::vector<uint32_t> directPreviewPixels;
+    uint32_t directPreviewWidth = 0;
+    uint32_t directPreviewHeight = 0;
+    uint64_t staticScreenKey = ~0ull;
+    int staticScreenFrames = 2;
     std::vector<CatalogItem> catalogItems;
     std::vector<PosterImage> catalogPosters;
     std::string catalogType = "movie";
@@ -1270,7 +1281,7 @@ int main() {
     int settingsPage = 0;
     bool playbackDecodeOnly = false;
     bool playbackLegacyApi = false;
-    bool playbackDirectVideoDec2 = false;
+    bool playbackDirectVideoDec2 = true;
     bool activePlaybackDecodeOnly = false;
     bool activePlaybackLegacyApi = false;
     int queuedPlaybackTest = -1;
@@ -1639,7 +1650,8 @@ int main() {
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
                 if (settingsPage == 0 && settingsSelection == 0) {
                     settingsPage = 1;
-                    settingsSelection = 0;
+                    // Direct Videodec2 is the validated 1080p default.
+                    settingsSelection = 3;
                 } else if (settingsPage == 0 && settingsSelection == 1) {
                     searchQuery.clear();
                     searchShowingResults = false;
@@ -1745,7 +1757,8 @@ int main() {
             activateCatalog(activeTab, true);
         }
         const bool localPlaybackRequested =
-            ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen) ||
+            ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen &&
+                !playbackDirectVideoDec2) ||
             (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 4 &&
                 !playbackDirectVideoDec2);
         if (localPlaybackRequested) {
@@ -1780,8 +1793,9 @@ int main() {
             }
             queuedPlaybackTest = -1;
         }
-        const bool directPlaybackRequested = queuedPlaybackTest == 0 &&
-            playbackDirectVideoDec2;
+        const bool directPlaybackRequested = playbackDirectVideoDec2 &&
+            (queuedPlaybackTest == 0 ||
+             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen));
         if (directPlaybackRequested) {
             stopBackgroundForPlayback();
             avPlayer.stop();
@@ -1888,7 +1902,11 @@ int main() {
         }
 
         if (videoDec2.state() != VideoDec2Probe::State::Idle) {
-            drawVideoDec2Test(scene, videoDec2);
+            staticScreenKey = ~0ull;
+            videoDec2.copyPreview(directPreviewPixels,
+                directPreviewWidth, directPreviewHeight);
+            drawVideoDec2Test(scene, videoDec2, directPreviewPixels,
+                directPreviewWidth, directPreviewHeight);
             static VideoDec2Probe::State reportedVideoDec2State =
                 VideoDec2Probe::State::Idle;
             if (videoDec2.state() != reportedVideoDec2State) {
@@ -1914,6 +1932,7 @@ int main() {
                 reportedVideoDec2State = videoDec2.state();
             }
         } else if (previewVisible) {
+            staticScreenKey = ~0ull;
             avPlayer.copyPreview(previewPixels, previewWidth, previewHeight);
             drawDecodedPreview(
                 scene, previewPixels, previewWidth, previewHeight,
@@ -1941,8 +1960,10 @@ int main() {
                 playbackTimingReported = true;
             }
         } else if (streamVisible) {
+            staticScreenKey = ~0ull;
             drawStreams(scene, details, streams, focusedStream);
         } else if (detailVisible) {
+            staticScreenKey = ~0ull;
             const PosterImage* poster =
                 detailPosterIndex >= 0 &&
                 detailPosterIndex < static_cast<int>(catalogPosters.size())
@@ -1950,21 +1971,45 @@ int main() {
             drawDetails(
                 scene, details, poster, catalogType, detailEpisodeIndex);
         } else if (activeTab == 3 && !searchShowingResults) {
-            drawSearch(scene, searchQuery, searchKey, indicatorX,
-                animationFrame);
+            uint64_t key = 0x5300000000000000ull |
+                (static_cast<uint64_t>(indicatorX) << 24) |
+                static_cast<uint32_t>(searchKey);
+            for (char value : searchQuery)
+                key = (key ^ static_cast<uint8_t>(value)) * 1099511628211ull;
+            if (key != staticScreenKey) {
+                staticScreenKey = key;
+                staticScreenFrames = kFrameBuffers;
+            }
+            if (staticScreenFrames > 0) {
+                drawSearch(scene, searchQuery, searchKey, indicatorX,
+                    animationFrame);
+                --staticScreenFrames;
+            }
         } else if (activeTab == 4) {
-            if (settingsPage == 1) {
-                drawPlayerSelection(scene, settingsSelection, indicatorX);
-            } else if (settingsPage == 2) {
-                drawQualitySelection(scene, settingsSelection, indicatorX,
-                    playbackDecodeOnly, playbackLegacyApi,
-                    playbackDirectVideoDec2);
-            } else if (settingsPage == 3) {
-                drawAbout(scene, indicatorX);
-            } else {
-                drawSettings(scene, settingsSelection, indicatorX);
+            const uint64_t key = 0x5400000000000000ull |
+                (static_cast<uint64_t>(indicatorX) << 24) |
+                (static_cast<uint64_t>(settingsPage) << 16) |
+                static_cast<uint32_t>(settingsSelection);
+            if (key != staticScreenKey) {
+                staticScreenKey = key;
+                staticScreenFrames = kFrameBuffers;
+            }
+            if (staticScreenFrames > 0) {
+                if (settingsPage == 1) {
+                    drawPlayerSelection(scene, settingsSelection, indicatorX);
+                } else if (settingsPage == 2) {
+                    drawQualitySelection(scene, settingsSelection, indicatorX,
+                        playbackDecodeOnly, playbackLegacyApi,
+                        playbackDirectVideoDec2);
+                } else if (settingsPage == 3) {
+                    drawAbout(scene, indicatorX);
+                } else {
+                    drawSettings(scene, settingsSelection, indicatorX);
+                }
+                --staticScreenFrames;
             }
         } else {
+            staticScreenKey = ~0ull;
             drawHardwareProbe(
                 scene, focusedCard, catalogPage, catalogType, catalogStatus,
                 catalogItems, catalogPosters, activeTab, indicatorX,

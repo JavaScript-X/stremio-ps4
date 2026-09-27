@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <pthread.h>
+#include <vector>
 
 // A deliberately small, dynamically-loaded Videodec2 diagnostic. Keeping the
 // ABI private prevents the incomplete OpenOrbis Videodec2 header from being
@@ -23,6 +24,8 @@ public:
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
     uint32_t submittedAccessUnits() const { return submittedAccessUnits_; }
+    bool copyPreview(std::vector<uint32_t>& pixels,
+        uint32_t& width, uint32_t& height) const;
 
 private:
     static void* threadEntry(void* value);
@@ -36,6 +39,11 @@ private:
     uint32_t width_ = 0;
     uint32_t height_ = 0;
     uint32_t submittedAccessUnits_ = 0;
+    std::vector<uint32_t> preview_;
+    uint32_t previewWidth_ = 0;
+    uint32_t previewHeight_ = 0;
+    mutable uint64_t deliveredFrame_ = 0;
+    mutable pthread_mutex_t previewMutex_ = {};
     const char* path_ = nullptr;
     pthread_t thread_ = {};
     volatile bool running_ = false;

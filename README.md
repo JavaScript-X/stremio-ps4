@@ -133,6 +133,12 @@ Version 2.83 fixes the actual player-screen return flag for both rendered and
 decode-only AVPlayer modes. It also regenerates the direct Annex-B probe with
 the correct bitstream-filter order: SPS and PPS headers are now preserved and
 repeated with IDR frames instead of sending an undecodable headerless stream.
+Version 2.90 promotes direct Videodec2 to the default 1080p playback engine.
+Hardware-decoded NV12 frames are exposed through a cacheable mapping, converted
+to a 960x540 presentation surface, scaled to the 1080p display, and paced at
+the source's native 24 FPS. AVPlayer remains available as a compatibility test.
+Search and Settings now redraw both display buffers only when their state
+changes, preserving 60 FPS navigation without repeatedly rasterizing static UI.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

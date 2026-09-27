@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <emmintrin.h>
 
 #include <orbis/libkernel.h>
 #include <orbis/Sysmodule.h>
@@ -129,6 +130,21 @@ bool allocateDirect(size_t requested, int memoryType, DirectBlock& block) {
     return true;
 }
 
+bool allocateDecoderFrames(size_t requested, DirectBlock& block) {
+    block.size = (requested + kDirectAlignment - 1) & ~(kDirectAlignment - 1);
+    if (sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(),
+            block.size, kDirectAlignment, 3, &block.offset) < 0) return false;
+    // A cacheable Onion mapping of decoder-visible physical memory avoids the
+    // 50-70 ms/frame WC-Garlic CPU readback penalty.
+    if (sceKernelMapDirectMemory2(&block.address, block.size, 0, 0x33, 0,
+            block.offset, kDirectAlignment) < 0) {
+        sceKernelReleaseDirectMemory(block.offset, block.size);
+        block = {};
+        return false;
+    }
+    return true;
+}
+
 void releaseDirect(DirectBlock& block) {
     if (!block.address) return;
     sceKernelMunmap(block.address, block.size);
@@ -217,8 +233,13 @@ std::vector<size_t> findAccessUnits(const std::vector<uint8_t>& data) {
 }
 }  // namespace
 
-VideoDec2Probe::VideoDec2Probe() = default;
-VideoDec2Probe::~VideoDec2Probe() { stop(); }
+VideoDec2Probe::VideoDec2Probe() {
+    pthread_mutex_init(&previewMutex_, nullptr);
+}
+VideoDec2Probe::~VideoDec2Probe() {
+    stop();
+    pthread_mutex_destroy(&previewMutex_);
+}
 
 bool VideoDec2Probe::start(const char* annexBPath) {
     stop();
@@ -231,6 +252,10 @@ bool VideoDec2Probe::start(const char* annexBPath) {
     width_ = 0;
     height_ = 0;
     submittedAccessUnits_ = 0;
+    preview_.clear();
+    previewWidth_ = 0;
+    previewHeight_ = 0;
+    deliveredFrame_ = 0;
     stopRequested_ = false;
     running_ = pthread_create(&thread_, nullptr, threadEntry, this) == 0;
     if (!running_) { state_ = State::Failed; errorStage_ = 1; return false; }
@@ -320,7 +345,8 @@ void VideoDec2Probe::decodeLoop() {
         allocateDirect(memory.cpuMemorySize, 0, cpuBlock) &&
         allocateDirect(memory.gpuMemorySize, 3, gpuBlock) &&
         allocateDirect(memory.cpuGpuMemorySize, 0, sharedBlock) &&
-        allocateDirect(memory.maxFrameBufferSize * kFrameBuffers, 3, frameBlock);
+        allocateDecoderFrames(memory.maxFrameBufferSize * kFrameBuffers,
+            frameBlock);
     if (!allocations) {
         releaseDirect(cpuBlock); releaseDirect(gpuBlock); releaseDirect(sharedBlock);
         releaseDirect(frameBlock); api.releaseQueue(queue); releaseDirect(computeBlock);
@@ -357,13 +383,56 @@ void VideoDec2Probe::decodeLoop() {
             if (errorCode_ < 0) { errorStage_ = 19; state_ = State::Failed; break; }
             ++frameIndex;
             if (output.isValid) {
+                const uint32_t pitch = output.framePitchInBytes > 0
+                    ? output.framePitchInBytes : output.framePitch;
+                const uint32_t sourceHeight = output.frameHeight;
+                constexpr uint32_t previewWidth = 960;
+                constexpr uint32_t previewHeight = 540;
+                std::vector<uint32_t> converted(
+                    static_cast<size_t>(previewWidth) * previewHeight);
+                const uint8_t* luma = static_cast<const uint8_t*>(
+                    output.frameBuffer);
+                const size_t nv12Bytes = static_cast<size_t>(pitch) *
+                    sourceHeight * 3 / 2;
+                for (size_t offset = 0; offset < nv12Bytes; offset += 64)
+                    _mm_clflush(luma + offset);
+                _mm_mfence();
+                const uint8_t* chroma = luma +
+                    static_cast<size_t>(pitch) * sourceHeight;
+                for (uint32_t y = 0; y < previewHeight; ++y) {
+                    const uint32_t sy = y * 2;
+                    for (uint32_t x = 0; x < previewWidth; ++x) {
+                        const uint32_t sx = x * 2;
+                        const int yy = luma[static_cast<size_t>(sy) * pitch + sx] - 16;
+                        const size_t uv = static_cast<size_t>(sy / 2) * pitch + sx;
+                        const int u = chroma[uv] - 128;
+                        const int v = chroma[uv + 1] - 128;
+                        auto clamp = [](int value) -> uint8_t {
+                            return value < 0 ? 0 : (value > 255 ? 255 : value);
+                        };
+                        converted[static_cast<size_t>(y) * previewWidth + x] =
+                            (static_cast<uint32_t>(clamp((298 * yy + 409 * v + 128) >> 8)) << 16) |
+                            (static_cast<uint32_t>(clamp((298 * yy - 100 * u - 208 * v + 128) >> 8)) << 8) |
+                            clamp((298 * yy + 516 * u + 128) >> 8);
+                    }
+                }
+                pthread_mutex_lock(&previewMutex_);
+                preview_.swap(converted);
+                previewWidth_ = previewWidth;
+                previewHeight_ = previewHeight;
                 ++decodedFrames_;
+                pthread_mutex_unlock(&previewMutex_);
                 width_ = output.frameWidth;
                 height_ = output.frameHeight;
                 const uint64_t elapsed = sceKernelGetProcessTime() - start;
                 if (elapsed) measuredFpsTimesTen_ =
                     static_cast<uint32_t>(decodedFrames_ * 10000000 / elapsed);
                 if (decodedFrames_ == 1) state_ = State::Passed;
+                // Present at the stream cadence instead of finishing the
+                // complete 52-second clip as a 140 FPS benchmark.
+                const uint64_t target = start + decodedFrames_ * 1000000 / 24;
+                const uint64_t now = sceKernelGetProcessTime();
+                if (target > now) sceKernelUsleep(target - now);
             }
         }
         if (!stopRequested_ && state_ != State::Failed) state_ = State::Finished;
@@ -378,4 +447,19 @@ void VideoDec2Probe::decodeLoop() {
     api.releaseQueue(queue);
     releaseDirect(computeBlock);
     releaseDirect(inputBlock);
+}
+
+bool VideoDec2Probe::copyPreview(std::vector<uint32_t>& pixels,
+    uint32_t& width, uint32_t& height) const {
+    pthread_mutex_lock(&previewMutex_);
+    if (decodedFrames_ == deliveredFrame_ || preview_.empty()) {
+        pthread_mutex_unlock(&previewMutex_);
+        return false;
+    }
+    pixels = preview_;
+    width = previewWidth_;
+    height = previewHeight_;
+    deliveredFrame_ = decodedFrames_;
+    pthread_mutex_unlock(&previewMutex_);
+    return true;
 }

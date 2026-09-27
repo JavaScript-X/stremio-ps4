@@ -232,6 +232,29 @@ void Scene2D::BlitRgb(
     }
 }
 
+void Scene2D::BlitRgbScaled(int x, int y, int width, int height,
+    const uint32_t* pixels, int sourceWidth, int sourceHeight) {
+    if (!pixels || width <= 0 || height <= 0 ||
+        sourceWidth <= 0 || sourceHeight <= 0) return;
+    const int left = std::max(0, x);
+    const int top = std::max(0, y);
+    const int right = std::min(width_, x + width);
+    const int bottom = std::min(height_, y + height);
+    uint32_t* buffer = reinterpret_cast<uint32_t*>(
+        frameBuffers_[activeFrameBuffer_]);
+    for (int destinationY = top; destinationY < bottom; ++destinationY) {
+        const int sourceY = (destinationY - y) * sourceHeight / height;
+        uint32_t* destination = buffer +
+            static_cast<size_t>(destinationY) * width_;
+        const uint32_t* source = pixels +
+            static_cast<size_t>(sourceY) * sourceWidth;
+        for (int destinationX = left; destinationX < right; ++destinationX) {
+            const int sourceX = (destinationX - x) * sourceWidth / width;
+            destination[destinationX] = 0x80000000u | source[sourceX];
+        }
+    }
+}
+
 void Scene2D::BlitRgbMasked(
     int x, int y, int width, int height, const uint32_t* pixels) {
     if (!pixels || width <= 0 || height <= 0) return;

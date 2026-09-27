@@ -31,6 +31,8 @@ public:
     void DrawRoundedRectangle(
         int x, int y, int width, int height, int radius, Color color);
     void BlitRgb(int x, int y, int width, int height, const uint32_t* pixels);
+    void BlitRgbScaled(int x, int y, int width, int height,
+        const uint32_t* pixels, int sourceWidth, int sourceHeight);
     void BlitRgbMasked(
         int x, int y, int width, int height, const uint32_t* pixels);
     void BlitRgbRounded(
