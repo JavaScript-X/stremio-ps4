@@ -75,6 +75,7 @@ constexpr const char* kCompanionConfigPath = "/data/stremio-companion.txt";
 constexpr const char* kAuthKeyPath = "/data/stremio-auth-key.txt";
 constexpr const char* kAddonCollectionPath = "/data/stremio-addons.json";
 constexpr const char* kNavigationConfigPath = "/data/stremio-navigation.txt";
+constexpr const char* kUiConfigPath = "/data/stremio-ui-mode.txt";
 constexpr const char* kLinkCreateUrl =
     "https://link.stremio.com/api/v2/create?type=Create";
 constexpr int kPosterWidth = 235;
@@ -94,6 +95,7 @@ volatile sig_atomic_t exitRequested = 0;
 bool imeDialogInitialized = false;
 bool useSideNavigation = true;
 bool navigationFocused = false;
+bool androidTvMode = true;
 
 void requestExit(int) {
     exitRequested = 1;
@@ -285,7 +287,7 @@ void drawHardwareProbe(
 
     scene.FrameBufferFill(background);
     const int cardX[] = {150, 440, 730, 1020, 1310, 1600};
-    const int cardY = 320 + catalogMotion;
+    const int cardY = (androidTvMode ? 535 : 320) + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
                               bool showTitles, int scalePercent) {
         if (rowPage < 0 || rowY >= 1000 || rowY + 390 <= 145) return;
@@ -348,7 +350,7 @@ void drawHardwareProbe(
     // The next row stays still. Movement belongs to page selection, not an
     // always-running animation that consumes GPU time and looks like jumping.
     const int previewY = 805 + (catalogMotion > 0 ? catalogMotion : 0);
-    if (catalogMotion >= 0)
+    if (!androidTvMode && catalogMotion >= 0)
         drawCatalogRow(nextPage, previewY, false, false, 90);
 
     // Paint the navigation after moving rows. This is a hard content viewport:
@@ -365,15 +367,28 @@ void drawHardwareProbe(
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
     scene.DrawText(300, 82, featured.c_str(), text, 5);
-    scene.DrawText(300, 155,
+    if (androidTvMode && selectedIndex < static_cast<int>(posters.size()) &&
+        posters[selectedIndex].valid()) {
+        scene.BlitRgbScaledRounded(1250, 15, 620, 520, 28,
+            posters[selectedIndex].pixels.data(), posters[selectedIndex].width,
+            posters[selectedIndex].height, 95);
+        scene.DrawRoundedRectangle(300, 165, 760, 250, 30, header);
+        scene.DrawText(345, 205, "FEATURED ON STREMIO", stremioPurple, 2);
+        scene.DrawText(345, 258, featured.c_str(), text, 4);
+        scene.DrawText(345, 330,
+            "Press Cross for details, episodes and available streams.",
+            mutedText, 2);
+    } else scene.DrawText(300, 155,
         "Browse with the D-pad or L3 stick", mutedText, 2);
     char pageText[64];
     snprintf(pageText, sizeof(pageText), "PAGE %d  /  %d TITLES", page + 1,
         static_cast<int>(items.size()));
     scene.DrawRoundedRectangle(1510, 46, 330, 62, 31, Color{35, 32, 47});
     scene.DrawText(1550, 66, pageText, mutedText, 2);
-    scene.DrawText(300, 215, "Recommended for you", text, 3);
-    scene.DrawText(300, 740, status.c_str(), mutedText, 2);
+    scene.DrawText(300, androidTvMode ? 475 : 215,
+        "Recommended for you", text, 3);
+    scene.DrawText(300, androidTvMode ? 900 : 740,
+        status.c_str(), mutedText, 2);
     scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
@@ -450,18 +465,18 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     drawSettingsHeader(scene, indicatorX, title);
     scene.DrawRoundedRectangle(380, 235, 1360, 675, 32, header);
     for (int index = 0; index < rowCount; ++index) {
-        const int y = 260 + index * 88;
+        const int y = 250 + index * 78;
         const bool focused = index == selected;
-        scene.DrawRoundedRectangle(415, y, 1290, 68, 34,
+        scene.DrawRoundedRectangle(415, y, 1290, 60, 30,
             focused ? focus : Color{35, 35, 46});
-        scene.DrawRoundedRectangle(435, y + 10, 48, 48, 24,
+        scene.DrawRoundedRectangle(435, y + 6, 48, 48, 24,
             focused ? Color{123, 91, 214} : Color{52, 52, 68});
         char number[8];
         snprintf(number, sizeof(number), "%02d", index + 1);
-        scene.DrawText(443, y + 21, number, text, 2);
-        scene.DrawText(515, y + 21, rows[index], text, 2);
+        scene.DrawText(443, y + 17, number, text, 2);
+        scene.DrawText(515, y + 17, rows[index], text, 2);
         if (focused) {
-            scene.DrawText(1640, y + 21, ">", text, 2);
+            scene.DrawText(1640, y + 17, ">", text, 2);
         }
     }
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
@@ -480,9 +495,37 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "CLEAR SEARCH QUERY",
         useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
-        "ABOUT STREMIO  v3.71"};
-    drawSettingsRows(scene, rows, 7, selected, indicatorX,
+        androidTvMode ? "HOME LAYOUT  ANDROID TV" :
+            "HOME LAYOUT  COMPACT GRID",
+        "ABOUT STREMIO  v3.80"};
+    drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
+}
+
+void drawStreamLookup(Scene2D& scene, const MetaDetails& details,
+        int animationFrame) {
+    const Color background = {11, 10, 17};
+    const Color panel = {28, 25, 39};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    scene.FrameBufferFill(background);
+    scene.DrawRoundedRectangle(410, 245, 1100, 560, 38, panel);
+    scene.DrawText(560, 335, "FINDING AVAILABLE STREAMS", text, 4);
+    scene.DrawText(560, 405, details.name.c_str(), muted, 2);
+    const int phase = (animationFrame / 4) % 12;
+    for (int dot = 0; dot < 12; ++dot) {
+        const double angle = 6.283185307179586 * dot / 12.0;
+        const int x = 960 + static_cast<int>(std::cos(angle) * 105.0);
+        const int y = 585 + static_cast<int>(std::sin(angle) * 105.0);
+        const int distance = (dot - phase + 12) % 12;
+        const uint8_t shade = static_cast<uint8_t>(55 + (11 - distance) * 16);
+        scene.DrawRoundedRectangle(x - 11, y - 11, 22, 22, 11,
+            distance < 4 ? purple : Color{shade, shade, shade});
+    }
+    scene.DrawText(660, 735,
+        "Contacting your addons. This can take a few seconds.", muted, 2);
+    drawButtonHint(scene, 40, 1020, 'O', "BACK");
 }
 
 void drawAccount(Scene2D& scene, int indicatorX, const std::string& code,
@@ -1736,6 +1779,31 @@ struct HlsSegmentJob {
     Fmp4VideoConfig config;
 };
 
+struct StreamLookupJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    bool showWhenReady = false;
+    int result = 0;
+    std::string catalogType;
+    std::string streamType;
+    std::string streamId;
+    std::vector<std::string> addonUrls;
+    std::vector<StreamItem> streams;
+};
+
+void* streamLookupEntry(void* argument) {
+    StreamLookupJob* job = static_cast<StreamLookupJob*>(argument);
+    job->streams.clear();
+    if (job->catalogType == "publicdomain")
+        job->result = fetchPublicDomainStreams(job->streamId, job->streams);
+    else job->result = fetchAddonStreams(job->addonUrls, job->streamType,
+        job->streamId, job->streams);
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
+
 struct AccountSyncJob {
     pthread_t thread = {};
     std::atomic<bool> running{false};
@@ -2013,6 +2081,9 @@ int main() {
     std::string navigationConfig;
     if (readCachedFile(kNavigationConfigPath, 16, navigationConfig))
         useSideNavigation = navigationConfig != "top";
+    std::string uiConfig;
+    if (readCachedFile(kUiConfigPath, 16, uiConfig))
+        androidTvMode = uiConfig != "grid";
     AccountSyncJob accountJob;
     std::string authKey;
     std::string addonCollectionJson;
@@ -2038,6 +2109,7 @@ int main() {
     CatalogPageJob pageJob;
     StreamPrepareJob streamJob;
     HlsSegmentJob hlsJob;
+    StreamLookupJob streamLookupJob;
     catalogJobs[0].type = "movie";
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
@@ -2297,6 +2369,25 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (streamLookupJob.completed.exchange(false,
+                std::memory_order_acq_rel)) {
+            pthread_join(streamLookupJob.thread, nullptr);
+            if (streamLookupJob.showWhenReady &&
+                streamLookupJob.result > 0) {
+                streams.swap(streamLookupJob.streams);
+                focusedStream = 0;
+                streamVisible = true;
+                detailVisible = true;
+            } else if (streamLookupJob.showWhenReady) {
+                char failure[96];
+                snprintf(failure, sizeof(failure),
+                    "Stremio: stream lookup failed at stage %d",
+                    -streamLookupJob.result);
+                notify(failure);
+            }
+            streamLookupJob.showWhenReady = false;
+            staticScreenKey = ~0ull;
+        }
         if (hlsJob.completed.exchange(false, std::memory_order_acq_rel)) {
             pthread_join(hlsJob.thread, nullptr);
             if (hlsJob.active && hlsJob.result == 0) {
@@ -2594,7 +2685,7 @@ int main() {
                 catalogPosters.clear();
             }
         } else if (shellVisible && !navigationFocused && activeTab == 4) {
-            const int maximumSelection = settingsPage == 0 ? 6 :
+            const int maximumSelection = settingsPage == 0 ? 7 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
@@ -2658,6 +2749,14 @@ int main() {
                         : "Stremio: classic top navigation saved");
                     staticScreenKey = ~0ull;
                 } else if (settingsPage == 0 && settingsSelection == 6) {
+                    androidTvMode = !androidTvMode;
+                    writeCachedFile(kUiConfigPath,
+                        androidTvMode ? "android-tv" : "grid");
+                    notify(androidTvMode
+                        ? "Stremio: Android TV home layout saved"
+                        : "Stremio: compact grid home layout saved");
+                    staticScreenKey = ~0ull;
+                } else if (settingsPage == 0 && settingsSelection == 7) {
                     settingsPage = 3;
                     settingsSelection = 0;
                 } else if (settingsPage == 4) {
@@ -2725,7 +2824,8 @@ int main() {
                 notify("Stremio: no item in this slot");
             }
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
-            !streamVisible) {
+            !streamVisible && !streamLookupJob.running.load(
+                std::memory_order_acquire)) {
             std::string streamType = catalogType == "series"
                 ? "series" : "movie";
             std::string streamId = details.id;
@@ -2736,22 +2836,27 @@ int main() {
                 }
                 streamId = details.episodes[detailEpisodeIndex].id;
             }
-            int streamResult = -9;
-            if (catalogType == "publicdomain")
-                streamResult = fetchPublicDomainStreams(streamId, streams);
-            else if (!addonUrls.empty())
-                streamResult = fetchAddonStreams(
-                    addonUrls, streamType, streamId, streams);
-            if (streamResult > 0) {
-                focusedStream = 0;
-                streamVisible = true;
-            } else if (addonUrls.empty() && catalogType != "publicdomain") {
+            if (addonUrls.empty() && catalogType != "publicdomain") {
                 notify("Stremio: link account and sync addons in Settings");
             } else {
-                char failure[96];
-                snprintf(failure, sizeof(failure),
-                    "Stremio: stream lookup failed at stage %d", -streamResult);
-                notify(failure);
+                stopBackgroundForPlayback();
+                streamLookupJob.catalogType = catalogType;
+                streamLookupJob.streamType = streamType;
+                streamLookupJob.streamId = streamId;
+                streamLookupJob.addonUrls = addonUrls;
+                streamLookupJob.result = 0;
+                streamLookupJob.showWhenReady = true;
+                streamLookupJob.completed.store(false,
+                    std::memory_order_release);
+                streamLookupJob.running.store(true,
+                    std::memory_order_release);
+                if (pthread_create(&streamLookupJob.thread, nullptr,
+                        streamLookupEntry, &streamLookupJob) != 0) {
+                    streamLookupJob.running.store(false,
+                        std::memory_order_release);
+                    streamLookupJob.showWhenReady = false;
+                    notify("Stremio: stream lookup worker could not start");
+                }
             }
         } else if ((pressed & (ORBIS_PAD_BUTTON_CROSS |
                     ORBIS_PAD_BUTTON_SQUARE)) != 0 && streamVisible &&
@@ -2959,6 +3064,10 @@ int main() {
             avPlayer.requestStop();
             avPlayerProbeFrames = 0;
             progressiveStreamOpening = false;
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+            streamLookupJob.running.load(std::memory_order_acquire)) {
+            streamLookupJob.showWhenReady = false;
+            detailVisible = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && streamVisible) {
             streamVisible = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
@@ -3077,6 +3186,10 @@ int main() {
                 streamJob.progress.expected.load(std::memory_order_acquire),
                 streamJob.progress.startedAt,
                 streamJob.progress.nativeError.load(std::memory_order_acquire));
+        } else if (streamLookupJob.running.load(std::memory_order_acquire) &&
+            streamLookupJob.showWhenReady) {
+            staticScreenKey = ~0ull;
+            drawStreamLookup(scene, details, animationFrame);
         } else if (streamVisible) {
             const uint64_t key = 0x5700000000000000ull |
                 (static_cast<uint64_t>(focusedStream) << 24) |
@@ -3165,6 +3278,7 @@ int main() {
             key ^= stableHash(catalogStatus);
             key ^= navigationFocused ? 0x100000ull : 0;
             key ^= useSideNavigation ? 0x200000ull : 0;
+            key ^= androidTvMode ? 0x400000ull : 0;
             if (key != staticScreenKey) {
                 staticScreenKey = key;
                 staticScreenFrames = kFrameBuffers;
@@ -3210,6 +3324,10 @@ int main() {
     if (streamJob.running.load(std::memory_order_acquire) ||
         streamJob.completed.load(std::memory_order_acquire))
         pthread_join(streamJob.thread, nullptr);
+    streamLookupJob.showWhenReady = false;
+    if (streamLookupJob.running.load(std::memory_order_acquire) ||
+        streamLookupJob.completed.load(std::memory_order_acquire))
+        pthread_join(streamLookupJob.thread, nullptr);
     hlsJob.active = false;
     if (hlsJob.running.load(std::memory_order_acquire) ||
         hlsJob.completed.load(std::memory_order_acquire))

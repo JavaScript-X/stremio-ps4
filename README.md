@@ -248,6 +248,14 @@ at 211x297, and steady catalog, details, and stream-picker screens are rendered
 only into the two framebuffers when their state changes. Idle frames now flip
 the cached buffers without repeating CPU image scaling or text rasterization.
 
+Version 3.80 adds a persistent Android TV home-layout option alongside the
+compact grid. Android TV mode presents one bottom carousel, a selected-title
+hero panel, large cached artwork and the expandable left rail. Stream discovery
+runs off the render thread and shows an animated progress surface, so a slow
+addon no longer makes the app appear frozen. The bundled Stremio typeface is
+baked at twice the previous resolution in a 1024px atlas for sharper large
+headings while retaining state-based framebuffer caching for a 60 FPS shell.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

@@ -28,7 +28,7 @@ bool insideRounded(int px, int py, int width, int height, int radius) {
     return dx * dx + dy * dy <= radius * radius;
 }
 
-constexpr int kFontAtlasSize = 512;
+constexpr int kFontAtlasSize = 1024;
 uint8_t fontAtlas[kFontAtlasSize * kFontAtlasSize] = {};
 stbtt_bakedchar fontCharacters[96] = {};
 bool fontAttempted = false;
@@ -50,7 +50,7 @@ bool initializeFont() {
     const bool read = fread(data.data(), 1, data.size(), file) == data.size();
     fclose(file);
     if (!read) return false;
-    fontReady = stbtt_BakeFontBitmap(data.data(), 0, 24.0f, fontAtlas,
+    fontReady = stbtt_BakeFontBitmap(data.data(), 0, 48.0f, fontAtlas,
         kFontAtlasSize, kFontAtlasSize, 32, 96, fontCharacters) > 0;
     return fontReady;
 }
@@ -348,7 +348,7 @@ void Scene2D::DrawText(
     }
 
     if (!initializeFont()) return;
-    const float displayScale = static_cast<float>(scale) / 2.0f;
+    const float displayScale = static_cast<float>(scale) / 4.0f;
     float cursorX = 0.0f;
     float cursorY = 22.0f;
     uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
@@ -391,7 +391,7 @@ void Scene2D::DrawText(
 
 int Scene2D::MeasureText(const char* text, int scale) {
     if (!text || scale <= 0 || !initializeFont()) return 0;
-    const float displayScale = static_cast<float>(scale) / 2.0f;
+    const float displayScale = static_cast<float>(scale) / 4.0f;
     float cursorX = 0.0f;
     float cursorY = 22.0f;
     for (const unsigned char character : std::string(text)) {
