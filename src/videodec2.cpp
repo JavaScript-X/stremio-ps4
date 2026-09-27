@@ -11,7 +11,7 @@
 
 namespace {
 constexpr size_t kDirectAlignment = 0x200000;
-constexpr int kFrameBuffers = 4;
+constexpr int kFrameBuffers = 8;
 
 struct ComputeConfig {
     uint64_t thisSize;
@@ -356,8 +356,10 @@ void VideoDec2Probe::decodeLoop() {
     config.maxLevel = avcLevel;
     config.maxFrameWidth = 1920;
     config.maxFrameHeight = 1088;
-    config.maxDpbFrameCount = 4;
-    config.decodePipelineDepth = 2;
+    // Streaming encodes commonly use several reference and B-frames. Four
+    // DPB surfaces can make presentation oscillate around the current frame.
+    config.maxDpbFrameCount = 16;
+    config.decodePipelineDepth = 4;
     config.computeQueue = queue;
     config.cpuAffinityMask = 0x3f;
     config.cpuThreadPriority = 700;

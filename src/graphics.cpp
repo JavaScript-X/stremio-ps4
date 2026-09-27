@@ -388,3 +388,18 @@ void Scene2D::DrawText(
         }
     }
 }
+
+int Scene2D::MeasureText(const char* text, int scale) {
+    if (!text || scale <= 0 || !initializeFont()) return 0;
+    const float displayScale = static_cast<float>(scale) / 2.0f;
+    float cursorX = 0.0f;
+    float cursorY = 22.0f;
+    for (const unsigned char character : std::string(text)) {
+        const unsigned char glyph = character >= 32 && character <= 126
+            ? character : '?';
+        stbtt_aligned_quad quad = {};
+        stbtt_GetBakedQuad(fontCharacters, kFontAtlasSize, kFontAtlasSize,
+            glyph - 32, &cursorX, &cursorY, &quad, 1);
+    }
+    return static_cast<int>(std::ceil(cursorX * displayScale));
+}

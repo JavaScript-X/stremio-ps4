@@ -216,6 +216,15 @@ the background and reports no-peers, network, codec, and fragmented-MP4
 failures separately. The AudioOut probe also tolerates an already-resident HEN
 module and no longer submits a null priming buffer.
 
+Version 3.50 redraws the navigation rail last so it remains a true full-height
+overlay on every Settings subpage, centers its labels and glyphs, and uses a
+rounded Stremio-purple selection pill. The bundled Gontserrat/Stremio typeface
+renders all application text, while controller hints now include a circular
+`L3` stick indicator. Direct Videodec2 allocates a deeper 16-frame decoded
+picture buffer and eight output surfaces for reordered B-frames in streaming
+encodes. AudioOut now treats `sceAudioOutOpen`, rather than the unreliable
+13.xx HEN initialization status, as the authoritative result of the test.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

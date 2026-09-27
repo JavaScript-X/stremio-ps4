@@ -44,6 +44,7 @@ public:
         uint8_t opacity = 255);
     void DrawText(
         int x, int y, const char* text, Color color, int scale = 2);
+    int MeasureText(const char* text, int scale = 2);
 
 private:
     bool initializeFlipQueue();

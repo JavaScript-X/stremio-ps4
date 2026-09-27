@@ -107,36 +107,53 @@ void drawBrand(Scene2D& scene, Color text) {
 }
 
 void drawSideNavigation(Scene2D& scene, int activeTab) {
-    const Color rail = {14, 14, 21};
-    const Color selected = {42, 35, 65};
+    const Color rail = {12, 11, 19};
+    const Color selected = {87, 61, 150};
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {135, 130, 151};
-    const int railWidth = navigationFocused ? 250 : 96;
+    const int railWidth = navigationFocused ? 330 : 96;
     scene.DrawRectangle(0, 0, railWidth, kHeight, rail);
+    scene.DrawVerticalFade(railWidth - 18, 0, 18, kHeight,
+        Color{65, 43, 110}, 110, 25);
     if (navigationFocused) drawBrand(scene, text);
     else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
         headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
-    const char* labels[] = {"MOVIES", "SERIES", "PUBLIC", "SEARCH", "SETTINGS"};
-    const char* glyphs[] = {"M", "TV", "P", "?", "*"};
+    const char* labels[] = {"Movies", "Series", "Public domain", "Search", "Settings"};
+    const char* glyphs[] = {"M", "TV", "P", "Q", "S"};
     for (int index = 0; index < kTopTabCount; ++index) {
-        const int y = 170 + index * 104;
+        const int y = 190 + index * 112;
         if (index == activeTab) {
             scene.DrawRoundedRectangle(22, y,
-                navigationFocused ? 206 : 58, 72, 20, selected);
-            scene.DrawRectangle(22, y + 14, 6, 44, purple);
+                navigationFocused ? 286 : 58, 76, 38, selected);
         }
-        scene.DrawRoundedRectangle(44, y + 16, 40, 40, 12,
-            index == activeTab ? purple : Color{38, 38, 51});
-        scene.DrawText(54, y + 24, glyphs[index], text,
+        scene.DrawRoundedRectangle(34, y + 10, 56, 56, 28,
+            index == activeTab ? purple : Color{31, 29, 42});
+        const int glyphWidth = scene.MeasureText(glyphs[index],
             index == 1 ? 1 : 2);
-        if (navigationFocused) scene.DrawText(102, y + 24, labels[index],
-            index == activeTab ? text : muted, 2);
+        scene.DrawText(62 - glyphWidth / 2, y + 28, glyphs[index], text,
+            index == 1 ? 1 : 2);
+        if (navigationFocused) {
+            const int labelWidth = scene.MeasureText(labels[index], 2);
+            scene.DrawText(196 - labelWidth / 2, y + 29, labels[index],
+                index == activeTab ? text : muted, 2);
+        }
     }
     if (navigationFocused) {
-        scene.DrawText(44, 890, "UP / DOWN", muted, 2);
-        scene.DrawText(44, 930, "CROSS OR RIGHT TO OPEN", muted, 1);
+        scene.DrawText(55, 885, "Navigate", text, 2);
+        scene.DrawText(55, 925, "UP / DOWN   Sections", muted, 1);
+        scene.DrawText(55, 957, "RIGHT / CROSS   Open", muted, 1);
     }
+}
+
+void drawStickHint(Scene2D& scene, int x, int y, const char* label) {
+    const Color panel = {35, 35, 46};
+    const Color rim = {164, 158, 181};
+    const Color text = {235, 232, 244};
+    scene.DrawRoundedRectangle(x, y, 44, 44, 22, rim);
+    scene.DrawRoundedRectangle(x + 5, y + 5, 34, 34, 17, panel);
+    scene.DrawText(x + 12, y + 13, "L3", text, 1);
+    scene.DrawText(x + 56, y + 8, label, text, 2);
 }
 
 void drawTopNavigation(Scene2D& scene, int activeTab) {
@@ -351,6 +368,7 @@ void drawHardwareProbe(
     scene.DrawRectangle(shimmerX, 998, 180, 3, stremioPurple);
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
+    drawStickHint(scene, 300, 1015, "NAVIGATE");
     drawNavigation(scene, activeTab);
 }
 
@@ -399,6 +417,7 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     drawButtonHint(scene, 1250, 1020, 'O', "CLEAR / BACK");
     drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
     drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
+    drawStickHint(scene, 300, 1015, "NAVIGATE");
     drawNavigation(scene, 3);
 }
 
@@ -412,7 +431,6 @@ void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
     scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
     scene.DrawText(300, 55, "STREMIO", muted, 2);
     scene.DrawText(300, 105, title, text, 5);
-    drawNavigation(scene, 4);
 }
 
 void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
@@ -441,6 +459,8 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawButtonHint(scene, 1390, 1020, 'O', "BACK");
     drawButtonHint(scene, 1640, 1020, 'X', action);
+    drawStickHint(scene, 360, 1015, "NAVIGATE");
+    drawNavigation(scene, 4);
 }
 
 void drawSettings(Scene2D& scene, int selected, int indicatorX) {
@@ -452,7 +472,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "CLEAR SEARCH QUERY",
         useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
-        "ABOUT STREMIO  v3.40"};
+        "ABOUT STREMIO  v3.50"};
     drawSettingsRows(scene, rows, 7, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -488,6 +508,8 @@ void drawAccount(Scene2D& scene, int indicatorX, const std::string& code,
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
     drawButtonHint(scene, 1530, 1020, 'X',
         signedIn ? "SYNC ADDONS" : "LINK ACCOUNT");
+    drawStickHint(scene, 360, 1015, "NAVIGATE");
+    drawNavigation(scene, 4);
 }
 
 void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
@@ -600,6 +622,8 @@ void drawAbout(Scene2D& scene, int indicatorX) {
         "THIS PROJECT IS INDEPENDENT AND OPEN SOURCE.", muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 230);
     drawButtonHint(scene, 1640, 1020, 'O', "BACK");
+    drawStickHint(scene, 360, 1015, "NAVIGATE");
+    drawNavigation(scene, 4);
 }
 
 void drawDetails(
@@ -667,6 +691,7 @@ void drawDetails(
     scene.DrawText(145, 720, "CACHED FOR FASTER REVISITS", muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
+    drawStickHint(scene, 420, 1015, "NAVIGATE");
     drawButtonHint(scene, catalogType == "series" ? 1570 : 1630, 1020, 'X',
         catalogType == "series" ? "SELECT EPISODE" : "FIND STREAMS");
 }
@@ -756,6 +781,7 @@ void drawStreams(
     scene.DrawText(1720, 875, position, muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
+    drawStickHint(scene, 420, 1015, "SELECT SOURCE");
     drawButtonHint(scene, 1250, 1020, 'S', "DOWNLOAD FULL");
     drawButtonHint(scene, 1580, 1020, 'X', "STREAM VIDEODEC2");
 }
@@ -902,9 +928,9 @@ int playAudioOutputTest(int userId) {
         // Some HEN builds report 0x809b0001 when the internal PRX is already
         // resident. That loader status is not an AudioOut failure.
         sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_AUDIOOUT);
-        const int init = sceAudioOutInit();
-        if (init < 0 && static_cast<unsigned int>(init) !=
-                ORBIS_AUDIO_OUT_ERROR_ALREADY_INIT) return init;
+        // 13.xx HEN can return the loader-domain 0x809b0001 even while the
+        // service is usable. sceAudioOutOpen supplies the authoritative error.
+        sceAudioOutInit();
         initialized = true;
     }
     constexpr int frames = 256;
