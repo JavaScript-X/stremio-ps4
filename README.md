@@ -183,6 +183,17 @@ without waiting for the full torrent. The experimental AVPlayer path remains
 available only as a compatibility diagnostic while native fragmented-MP4
 segment ingestion for Videodec2 is developed.
 
+Version 3.20 expands Search into an Android-TV-inspired discovery surface with
+Movies, Series, and Public Domain filter chips. Left/Right changes the filter,
+the native PS4 keyboard supplies the query, and as many as 24 cached results
+are presented through the same paged poster UI, metadata details, episode
+selection, addon stream resolver, and stream actions as the main catalogs.
+Public Domain filtering is performed locally against its addon catalog because
+that addon returns no server-side search results. Settings also includes a
+native 48 kHz signed-16-bit stereo HDMI tone test through `libSceAudioOut`,
+establishing the PS4 output path required before streamed audio demux and A/V
+synchronization are added.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

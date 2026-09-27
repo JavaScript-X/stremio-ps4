@@ -1,5 +1,5 @@
 TITLE      := Stremio
-VERSION    := 3.13
+VERSION    := 3.20
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -31,6 +31,7 @@ TOOLS      := $(TOOLCHAIN)/bin/linux
 LIBS       := -lc -lkernel -lc++ -lSceVideoOut -lSceSysmodule \
 	-lScePad -lSceUserService -lSceSysUtil -lSceSystemService \
 	-lSceNet -lSceSsl -lSceHttp -lSceAvPlayer
+LIBS       += -lSceAudioOut
 LIBS       += -lSceCommonDialog -lSceImeDialog
 CFLAGS     := --target=x86_64-pc-freebsd12-elf -O2 -DNDEBUG \
 	-fPIC -funwind-tables -c \

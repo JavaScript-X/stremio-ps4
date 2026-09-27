@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 
 #include <orbis/libkernel.h>
+#include <orbis/AudioOut.h>
 #include <orbis/Http.h>
 #include <orbis/CommonDialog.h>
 #include <orbis/ImeDialog.h>
@@ -309,7 +310,7 @@ void drawHardwareProbe(
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
 }
 
-void drawSearch(Scene2D& scene, const std::string& query, int,
+void drawSearch(Scene2D& scene, const std::string& query, int filter,
     int indicatorX, int) {
     const Color background = {18, 18, 24};
     const Color header = {29, 29, 39};
@@ -327,13 +328,23 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
     scene.DrawText(120, 185, "SEARCH", text, 4);
     scene.DrawText(120, 245,
-        "FIND MOVIES AND SERIES ACROSS THE CINEMETA CATALOG", muted, 2);
-    scene.DrawRoundedRectangle(170, 305, 1580, 180, 30, header);
-    scene.DrawRoundedRectangle(205, 345, 68, 68, 20, purple);
-    scene.DrawText(226, 359, "?", text, 4);
-    scene.DrawText(305, 335, "TITLE", muted, 2);
+        "SEARCH MOVIES, SERIES, OR THE PUBLIC DOMAIN COLLECTION", muted, 2);
+    const char* filters[] = {"MOVIES", "SERIES", "PUBLIC DOMAIN"};
+    const int filterWidths[] = {250, 250, 360};
+    int filterX = 170;
+    for (int index = 0; index < 3; ++index) {
+        scene.DrawRoundedRectangle(filterX, 285, filterWidths[index], 62, 20,
+            index == filter ? purple : header);
+        scene.DrawText(filterX + 30, 304, filters[index],
+            index == filter ? text : muted, 2);
+        filterX += filterWidths[index] + 24;
+    }
+    scene.DrawRoundedRectangle(170, 375, 1580, 130, 30, header);
+    scene.DrawRoundedRectangle(205, 405, 68, 68, 20, purple);
+    scene.DrawText(226, 419, "?", text, 4);
+    scene.DrawText(305, 397, "TITLE", muted, 2);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
-    scene.DrawText(305, 382, shown.c_str(), query.empty() ? muted : text, 3);
+    scene.DrawText(305, 442, shown.c_str(), query.empty() ? muted : text, 3);
     scene.DrawRoundedRectangle(170, 535, 760, 235, 26, header);
     scene.DrawText(215, 575, "PS4 SYSTEM KEYBOARD", text, 3);
     scene.DrawText(215, 630, "CROSS   TYPE / SELECT", muted, 2);
@@ -347,7 +358,9 @@ void drawSearch(Scene2D& scene, const std::string& query, int,
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
     drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
     drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
-    drawButtonHint(scene, 1170, 1020, 'O', "CLEAR / BACK");
+    drawButtonHint(scene, 900, 1020, '<', "FILTER");
+    drawButtonHint(scene, 1080, 1020, '>', "FILTER");
+    drawButtonHint(scene, 1250, 1020, 'O', "CLEAR / BACK");
     drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
     drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
 }
@@ -404,10 +417,11 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "STREMIO ACCOUNT AND SYNCED ADDONS",
         "PLAYBACK TESTS",
+        "AUDIO OUTPUT TEST  48KHZ STEREO",
         "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.10"};
-    drawSettingsRows(scene, rows, 5, selected, indicatorX,
+        "ABOUT STREMIO  v3.20"};
+    drawSettingsRows(scene, rows, 6, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
 
@@ -621,8 +635,8 @@ void drawDetails(
     scene.DrawText(145, 720, "CACHED FOR FASTER REVISITS", muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
-    if (catalogType == "series")
-        drawButtonHint(scene, 1620, 1020, 'X', "SELECT EPISODE");
+    drawButtonHint(scene, catalogType == "series" ? 1570 : 1630, 1020, 'X',
+        catalogType == "series" ? "SELECT EPISODE" : "FIND STREAMS");
 }
 
 void drawStreams(
@@ -820,6 +834,40 @@ void drawDecodedPreview(
 
 void notify(const char* message) {
     sceSysUtilSendSystemNotificationWithText(222, message);
+}
+
+int playAudioOutputTest(int userId) {
+    static bool initialized = false;
+    if (!initialized) {
+        const int init = sceAudioOutInit();
+        if (init < 0) return init;
+        initialized = true;
+    }
+    constexpr int frames = 256;
+    constexpr int rate = 48000;
+    const int handle = sceAudioOutOpen(userId,
+        ORBIS_AUDIO_OUT_PORT_TYPE_MAIN, 0, frames, rate,
+        ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
+    if (handle <= 0) return handle;
+    int16_t samples[frames * 2];
+    double phase = 0.0;
+    int result = 0;
+    for (int block = 0; block < 188; ++block) {
+        const double frequency = block < 94 ? 440.0 : 660.0;
+        for (int frame = 0; frame < frames; ++frame) {
+            const int16_t value = static_cast<int16_t>(
+                std::sin(phase) * 9000.0);
+            samples[frame * 2] = value;
+            samples[frame * 2 + 1] = value;
+            phase += 6.283185307179586 * frequency / rate;
+            if (phase >= 6.283185307179586) phase -= 6.283185307179586;
+        }
+        sceAudioOutOutput(handle, nullptr);
+        result = sceAudioOutOutput(handle, samples);
+        if (result < 0) break;
+    }
+    sceAudioOutClose(handle);
+    return result;
 }
 
 int initializeController(int& userId) {
@@ -1366,13 +1414,20 @@ int fetchCatalogPage(
     const std::string& catalogType,
     int skip,
     const std::string& searchQuery,
-    std::vector<CatalogItem>& items) {
+    std::vector<CatalogItem>& items,
+    size_t maximumItems = kCatalogBatchSize) {
     if (catalogType != "movie" && catalogType != "series" &&
         catalogType != "publicdomain") return -10;
     std::string url;
     if (!searchQuery.empty()) {
-        url = std::string("https://v3-cinemeta.strem.io/catalog/") +
-            catalogType + "/top/search=" + urlEncode(searchQuery) + ".json";
+        if (catalogType == "publicdomain") {
+            url = std::string(kPublicDomainBaseUrl) +
+                "catalog/movie/publicdomainmovies/search=" +
+                urlEncode(searchQuery) + ".json";
+        } else {
+            url = std::string("https://v3-cinemeta.strem.io/catalog/") +
+                catalogType + "/top/search=" + urlEncode(searchQuery) + ".json";
+        }
     } else if (catalogType == "publicdomain") {
         url = std::string(kPublicDomainBaseUrl) +
             "catalog/movie/publicdomainmovies";
@@ -1395,7 +1450,7 @@ int fetchCatalogPage(
         bytes = static_cast<int>(body.size());
     }
     if (bytes < 0) return bytes;
-    return parseCatalogItems(body, items, kCatalogBatchSize)
+    return parseCatalogItems(body, items, maximumItems)
         ? static_cast<int>(items.size()) : -8;
 }
 
@@ -1764,6 +1819,7 @@ int main() {
     int queuedPlaybackTest = -1;
     bool searchShowingResults = false;
     std::string searchQuery;
+    int searchFilter = 0;
     bool detailVisible = false;
     bool streamVisible = false;
     bool progressiveStreamOpening = false;
@@ -1970,8 +2026,31 @@ int main() {
         }
         catalogItems.clear();
         catalogPosters.clear();
-        const int result = fetchCatalogPage(
-            "movie", 0, searchQuery, catalogItems);
+        const char* searchTypes[] = {"movie", "series", "publicdomain"};
+        const std::string selectedType = searchTypes[searchFilter];
+        int result = 0;
+        if (selectedType == "publicdomain") {
+            std::vector<CatalogItem> candidates;
+            result = fetchCatalogPage(
+                selectedType, 0, "", candidates, 64);
+            std::string needle = searchQuery;
+            std::transform(needle.begin(), needle.end(), needle.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            catalogItems.clear();
+            for (const CatalogItem& candidate : candidates) {
+                std::string title = candidate.name;
+                std::transform(title.begin(), title.end(), title.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (title.find(needle) != std::string::npos) {
+                    catalogItems.push_back(candidate);
+                    if (catalogItems.size() == 24) break;
+                }
+            }
+            result = static_cast<int>(catalogItems.size());
+        } else {
+            result = fetchCatalogPage(
+                selectedType, 0, searchQuery, catalogItems, 24);
+        }
         if (result > 0) {
             const int posterCount = fetchPosters(catalogItems, catalogPosters);
             char status[128];
@@ -1981,7 +2060,7 @@ int main() {
             catalogStatus = status;
             catalogPage = 0;
             focusedCard = 0;
-            catalogType = "movie";
+            catalogType = selectedType;
             searchShowingResults = true;
         } else {
             catalogStatus = "NO SEARCH RESULTS - CIRCLE TO EDIT";
@@ -2187,6 +2266,10 @@ int main() {
         }
 
         if (shellVisible && activeTab == 3 && !searchShowingResults) {
+            if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0)
+                searchFilter = (searchFilter + 2) % 3;
+            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0)
+                searchFilter = (searchFilter + 1) % 3;
             if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
                 // The same Cross press must not leak into the native IME and
                 // immediately accept/close it. Wait for a clean release first.
@@ -2242,7 +2325,7 @@ int main() {
                 catalogPosters.clear();
             }
         } else if (shellVisible && activeTab == 4) {
-            const int maximumSelection = settingsPage == 0 ? 4 :
+            const int maximumSelection = settingsPage == 0 ? 5 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
@@ -2262,6 +2345,18 @@ int main() {
                     // Direct Videodec2 is the validated 1080p default.
                     settingsSelection = 3;
                 } else if (settingsPage == 0 && settingsSelection == 2) {
+                    notify("Stremio: playing 48 kHz stereo audio test");
+                    const int audioResult = playAudioOutputTest(userId);
+                    if (audioResult < 0) {
+                        char failure[96];
+                        snprintf(failure, sizeof(failure),
+                            "Stremio: audio output failed 0x%08x",
+                            static_cast<unsigned int>(audioResult));
+                        notify(failure);
+                    } else {
+                        notify("Stremio: stereo audio output test passed");
+                    }
+                } else if (settingsPage == 0 && settingsSelection == 3) {
                     while ((readButtons(pad) & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                         !exitRequested) sceKernelUsleep(8000);
                     if (pad >= 0) { scePadClose(pad); pad = -1; }
@@ -2277,11 +2372,11 @@ int main() {
                     }
                     pad = scePadOpen(userId, 0, 0, nullptr);
                     previousButtons = readButtons(pad);
-                } else if (settingsPage == 0 && settingsSelection == 3) {
+                } else if (settingsPage == 0 && settingsSelection == 4) {
                     searchQuery.clear();
                     searchShowingResults = false;
                     notify("Stremio: search query cleared");
-                } else if (settingsPage == 0 && settingsSelection == 4) {
+                } else if (settingsPage == 0 && settingsSelection == 5) {
                     settingsPage = 3;
                     settingsSelection = 0;
                 } else if (settingsPage == 4) {
@@ -2708,6 +2803,7 @@ int main() {
         } else if (activeTab == 3 && !searchShowingResults) {
             uint64_t key = 0x5300000000000000ull |
                 (static_cast<uint64_t>(indicatorX) << 24) |
+                (static_cast<uint64_t>(searchFilter) << 8) |
                 static_cast<uint32_t>(searchKey);
             for (char value : searchQuery)
                 key = (key ^ static_cast<uint8_t>(value)) * 1099511628211ull;
@@ -2716,7 +2812,7 @@ int main() {
                 staticScreenFrames = kFrameBuffers;
             }
             if (staticScreenFrames > 0) {
-                drawSearch(scene, searchQuery, searchKey, indicatorX,
+                drawSearch(scene, searchQuery, searchFilter, indicatorX,
                     animationFrame);
                 --staticScreenFrames;
             }
