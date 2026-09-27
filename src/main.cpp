@@ -397,7 +397,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.81"};
+        "ABOUT STREMIO  v2.82"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -425,7 +425,8 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder) {
     scene.DrawRoundedRectangle(280, 315, 1360, 430, 34, panel);
     scene.DrawRoundedRectangle(330, 370, 120, 120, 30, purple);
     scene.DrawText(365, 405, "GPU", text, 3);
-    scene.DrawText(505, 370, "H.264 HIGH L4.1   1920x1080 / 24 FPS", text, 3);
+    scene.DrawText(505, 370,
+        "H.264 BASELINE L4.0   1920x1080 / 24 FPS", text, 3);
     scene.DrawText(505, 430,
         "RAW ANNEX-B ACCESS UNITS - AVPLAYER BYPASSED", muted, 2);
     scene.DrawText(505, 480,
@@ -449,7 +450,7 @@ void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
     bool decodeOnly, bool legacyApi, bool directVideoDec2) {
     if (directVideoDec2) {
         const char* directRows[] = {
-            "1080P HIGH L4.1 / RAW ANNEX-B / GPU DECODE-ONLY"};
+            "1080P BASELINE L4.0 / RAW ANNEX-B / GPU DECODE-ONLY"};
         drawSettingsRows(scene, directRows, 1, selected, indicatorX,
             "DIRECT VIDEODEC2 / SELECT TEST", "RUN");
         return;
@@ -1539,7 +1540,7 @@ int main() {
             } else if (previewVisible ||
                 avPlayer.state() != AvPlayerProbe::State::Idle) {
                 DEBUGLOG << "Options pressed during playback; returning to shell";
-                avPlayer.stop();
+                avPlayer.requestStop();
                 previewVisible = false;
             } else {
                 DEBUGLOG << "Options pressed from shell; Home API disabled";
@@ -1828,7 +1829,7 @@ int main() {
             queuedPlaybackTest = -1;
         }
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
-            avPlayer.stop();
+            avPlayer.requestStop();
             avPlayerProbeFrames = 0;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             videoDec2.state() != VideoDec2Probe::State::Idle) {
@@ -1836,7 +1837,7 @@ int main() {
             previewVisible = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             avPlayer.state() != AvPlayerProbe::State::Idle) {
-            avPlayer.stop();
+            avPlayer.requestStop();
             avPlayerProbeFrames = 0;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && streamVisible) {
             streamVisible = false;
@@ -1849,7 +1850,7 @@ int main() {
             avPlayer.state() == AvPlayerProbe::State::Decoding) {
             ++avPlayerProbeFrames;
             if (avPlayerProbeFrames > 1200) {
-                avPlayer.stop();
+                avPlayer.requestStop();
                 notify("Stremio: AVPlayer timed out before first frame");
             }
         }

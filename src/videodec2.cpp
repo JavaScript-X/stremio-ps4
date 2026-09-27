@@ -295,8 +295,10 @@ void VideoDec2Probe::decodeLoop() {
     config.thisSize = sizeof(config);
     config.resourceType = 1;
     config.codecType = 1;
-    config.profile = 100;
-    config.maxLevel = 51;
+    // The packaged direct test is Constrained Baseline Level 4.0. Matching
+    // the SPS avoids INVALID_SEQUENCE on firmware 13.02.
+    config.profile = 66;
+    config.maxLevel = 40;
     config.maxFrameWidth = 1920;
     config.maxFrameHeight = 1088;
     config.maxDpbFrameCount = 4;
@@ -305,29 +307,26 @@ void VideoDec2Probe::decodeLoop() {
     config.cpuAffinityMask = 0x3f;
     config.cpuThreadPriority = 700;
     config.optimizeProgressiveVideo = true;
-    config.checkMemoryType = true;
+    config.checkMemoryType = false;
     DecoderMemory memory = {}; memory.thisSize = sizeof(memory);
     errorCode_ = api.queryDecoder(&config, &memory);
     if (errorCode_ < 0) {
         api.releaseQueue(queue); releaseDirect(computeBlock);
         releaseDirect(inputBlock); errorStage_ = 16; state_ = State::Failed; return;
     }
-    void* cpuMemory = nullptr;
-    if (posix_memalign(&cpuMemory, 0x4000, memory.cpuMemorySize) != 0)
-        cpuMemory = nullptr;
-    DirectBlock gpuBlock, sharedBlock, frameBlock;
-    const bool allocations = cpuMemory &&
+    DirectBlock cpuBlock, gpuBlock, sharedBlock, frameBlock;
+    const bool allocations =
+        allocateDirect(memory.cpuMemorySize, 0, cpuBlock) &&
         allocateDirect(memory.gpuMemorySize, 3, gpuBlock) &&
         allocateDirect(memory.cpuGpuMemorySize, 0, sharedBlock) &&
         allocateDirect(memory.maxFrameBufferSize * kFrameBuffers, 3, frameBlock);
     if (!allocations) {
-        free(cpuMemory); releaseDirect(gpuBlock); releaseDirect(sharedBlock);
+        releaseDirect(cpuBlock); releaseDirect(gpuBlock); releaseDirect(sharedBlock);
         releaseDirect(frameBlock); api.releaseQueue(queue); releaseDirect(computeBlock);
         releaseDirect(inputBlock); errorStage_ = 17; errorCode_ = -1;
         state_ = State::Failed; return;
     }
-    std::memset(cpuMemory, 0, memory.cpuMemorySize);
-    memory.cpuMemory = cpuMemory;
+    memory.cpuMemory = cpuBlock.address;
     memory.gpuMemory = gpuBlock.address;
     memory.cpuGpuMemory = sharedBlock.address;
     void* decoder = nullptr;
@@ -370,7 +369,7 @@ void VideoDec2Probe::decodeLoop() {
     } else {
         state_ = State::Failed;
     }
-    free(cpuMemory);
+    releaseDirect(cpuBlock);
     releaseDirect(frameBlock);
     releaseDirect(sharedBlock);
     releaseDirect(gpuBlock);

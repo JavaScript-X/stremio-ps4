@@ -104,6 +104,12 @@ AvPlayerProbe::~AvPlayerProbe() {
 
 bool AvPlayerProbe::start(
     const char* url, bool renderPreview, bool legacyFrameApi) {
+    if (decoderThreadRunning_ && !decoderThreadFinished_) {
+        errorStage_ = 8;
+        errorCode_ = -1;
+        state_ = State::Failed;
+        return false;
+    }
     stop();
     errorStage_ = 0;
     errorCode_ = 0;
@@ -119,6 +125,7 @@ bool AvPlayerProbe::start(
     measuredFpsTimesTen_ = 0;
     duration_ = 0;
     stopDecoderThread_ = false;
+    decoderThreadFinished_ = false;
     started_ = false;
     paused_ = false;
     renderPreview_ = renderPreview;
@@ -175,7 +182,12 @@ bool AvPlayerProbe::start(
 }
 
 void AvPlayerProbe::update() {
-    if (!handle_ || state_ == State::Failed) {
+    if (decoderThreadRunning_ && decoderThreadFinished_) {
+        pthread_join(decoderThread_, nullptr);
+        decoderThreadRunning_ = false;
+        decoderThreadFinished_ = false;
+    }
+    if (!handle_ || state_ == State::Failed || state_ == State::Idle) {
         return;
     }
     constexpr int32_t kReadyEvent = 0x02;
@@ -238,7 +250,17 @@ void AvPlayerProbe::update() {
 }
 
 void* AvPlayerProbe::decoderThreadEntry(void* argument) {
-    static_cast<AvPlayerProbe*>(argument)->decoderLoop();
+    AvPlayerProbe* player = static_cast<AvPlayerProbe*>(argument);
+    player->decoderLoop();
+    // Keep teardown on the same thread that owns GetVideoData[Ex]. Sony's
+    // implementation may wait internally during Stop/Close; doing that here
+    // leaves the controller/render loop responsive and avoids an API race.
+    if (player->handle_ && player->stopDecoderThread_) {
+        if (player->started_) sceAvPlayerStop(player->handle_);
+        sceAvPlayerClose(player->handle_);
+        player->handle_ = nullptr;
+    }
+    player->decoderThreadFinished_ = true;
     return nullptr;
 }
 
@@ -338,19 +360,27 @@ void AvPlayerProbe::decoderLoop() {
     }
 }
 
-void AvPlayerProbe::stop() {
-    if (handle_) {
-        stopDecoderThread_ = true;
-        // GetVideoData[Ex] is non-blocking. Join the frame-pull worker before
-        // calling Stop: invoking Stop concurrently with a frame query can tear
-        // down AVPlayer-owned frame memory and crash during Circle/back.
-        if (decoderThreadRunning_) {
-            pthread_join(decoderThread_, nullptr);
-            decoderThreadRunning_ = false;
-        }
+void AvPlayerProbe::requestStop() {
+    stopDecoderThread_ = true;
+    state_ = State::Idle;
+    paused_ = false;
+    // During Opening no frame worker exists, so these calls cannot race a
+    // frame query and are normally immediate.
+    if (handle_ && !decoderThreadRunning_) {
         if (started_) sceAvPlayerStop(handle_);
         sceAvPlayerClose(handle_);
         handle_ = nullptr;
+    }
+}
+
+void AvPlayerProbe::stop() {
+    if (handle_) {
+        requestStop();
+        if (decoderThreadRunning_) {
+            pthread_join(decoderThread_, nullptr);
+            decoderThreadRunning_ = false;
+            decoderThreadFinished_ = false;
+        }
     }
     state_ = State::Idle;
     started_ = false;

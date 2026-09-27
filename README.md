@@ -125,6 +125,10 @@ Version 2.81 registers the internal VdecCore dependency and retries Videodec2
 by sandbox-visible module name when firmware rejects its absolute path. It also
 joins AVPlayer's non-blocking frame worker before Stop/Close, preventing the
 frame-query versus teardown race observed when leaving player modes 1 and 2.
+Version 2.82 makes Circle return to the shell immediately while AVPlayer's
+owning worker completes Stop/Close asynchronously. The direct test now uses a
+Constrained Baseline Level 4.0 sequence with matching decoder profile/level and
+Onion-backed CPU work memory to address firmware 13.02 INVALID_SEQUENCE errors.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

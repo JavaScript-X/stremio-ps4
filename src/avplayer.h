@@ -140,6 +140,9 @@ public:
         bool renderPreview = true,
         bool legacyFrameApi = false);
     void update();
+    // Return control to the shell immediately; the frame-owning worker performs
+    // Sony AVPlayer Stop/Close so teardown can never block the render thread.
+    void requestStop();
     void stop();
     void togglePause();
     bool seekRelative(int64_t milliseconds);
@@ -182,5 +185,6 @@ private:
     pthread_t decoderThread_ = {};
     mutable pthread_mutex_t previewMutex_ = {};
     volatile bool decoderThreadRunning_ = false;
+    volatile bool decoderThreadFinished_ = false;
     volatile bool stopDecoderThread_ = false;
 };
