@@ -80,6 +80,7 @@ constexpr const char* kLinkCreateUrl =
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
 constexpr int kCatalogBatchSize = 8;
+constexpr int kCatalogPageSize = 6;
 constexpr int kTopTabCount = 5;
 const char* const kTopTabs[kTopTabCount] = {
     "MOVIES", "SERIES", "PUBLIC DOMAIN", "SEARCH", "SETTINGS"};
@@ -278,21 +279,21 @@ void drawHardwareProbe(
     const Color header = {24, 22, 33};
     const Color stremioPurple = {123, 91, 214};
     const Color cardMuted = {35, 35, 46};
-    const Color focus = {196, 174, 255};
+    const Color focus = {82, 58, 142};
     const Color text = {235, 232, 244};
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
-    const int cardX[] = {300, 700, 1100, 1500};
-    const int cardY = 260 + catalogMotion;
+    const int cardX[] = {150, 440, 730, 1020, 1310, 1600};
+    const int cardY = 320 + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
                               bool showTitles, int scalePercent) {
-        if (rowPage < 0 || rowY >= 1000 || rowY + 460 <= 145) return;
-        const int cardWidth = 310 * scalePercent / 100;
-        const int cardHeight = 410 * scalePercent / 100;
-        for (int index = 0; index < 4; ++index) {
-        const int itemIndex = rowPage * 4 + index;
-        const int x = cardX[index] + (310 - cardWidth) / 2;
+        if (rowPage < 0 || rowY >= 1000 || rowY + 390 <= 145) return;
+        const int cardWidth = 235 * scalePercent / 100;
+        const int cardHeight = 330 * scalePercent / 100;
+        for (int index = 0; index < kCatalogPageSize; ++index) {
+        const int itemIndex = rowPage * kCatalogPageSize + index;
+        const int x = cardX[index] + (235 - cardWidth) / 2;
         if (selected && index == focusedCard) {
             // Keep focus stable. A flashing/pulsing border distracts from the
             // poster artwork and costs redraw work on every catalog frame.
@@ -305,12 +306,14 @@ void drawHardwareProbe(
         const bool posterReady = itemIndex < static_cast<int>(posters.size()) &&
             posters[itemIndex].valid();
         if (posterReady && scalePercent == 100) {
-            scene.BlitRgbMasked(x, rowY, posters[itemIndex].width,
-                posters[itemIndex].height, posters[itemIndex].pixels.data());
+            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 18,
+                posters[itemIndex].pixels.data(), posters[itemIndex].width,
+                posters[itemIndex].height);
         } else if (posterReady && posters[itemIndex].previewValid()) {
-            scene.BlitRgbMasked(x, rowY, posters[itemIndex].previewWidth,
-                posters[itemIndex].previewHeight,
-                posters[itemIndex].previewPixels.data());
+            scene.BlitRgbScaledRounded(x, rowY, cardWidth, cardHeight, 18,
+                posters[itemIndex].previewPixels.data(),
+                posters[itemIndex].previewWidth,
+                posters[itemIndex].previewHeight);
         } else {
             scene.DrawRoundedRectangle(x, rowY, cardWidth, cardHeight, 18,
                 stremioPurple);
@@ -319,7 +322,7 @@ void drawHardwareProbe(
             const int logoY = rowY + (cardHeight - logoSize) / 2;
             scene.DrawRoundedRectangle(logoX - 12, logoY - 12,
                 logoSize + 24, logoSize + 24, 28, cardMuted);
-            if (headerLogo.valid() && rowY >= 0 && rowY + 410 <= kHeight) {
+            if (headerLogo.valid() && rowY >= 0 && rowY + cardHeight <= kHeight) {
                 scene.BlitRgbScaledRounded(logoX, logoY,
                     logoSize, logoSize, 20, headerLogo.pixels.data(),
                     headerLogo.width, headerLogo.height);
@@ -335,9 +338,9 @@ void drawHardwareProbe(
     // During paging, preserve the old row and move it out while the exact
     // cards that were visible below move into the selected position.
     if (catalogMotion > 0)
-        drawCatalogRow(page - 1, cardY - 560, false, true, 100);
+        drawCatalogRow(page - 1, cardY - 480, false, true, 100);
     else if (catalogMotion < 0)
-        drawCatalogRow(page + 1, cardY + 560, false, true, 100);
+        drawCatalogRow(page + 1, cardY + 480, false, true, 100);
     // Use the precomputed 90% texture for most of the rise and switch to the
     // full poster near its destination. Avoid resampling four JPEGs per frame.
     const int selectedScale = catalogMotion > 48 ? 90 : 100;
@@ -346,7 +349,7 @@ void drawHardwareProbe(
     const int nextPage = page + 1;
     // The next row stays still. Movement belongs to page selection, not an
     // always-running animation that consumes GPU time and looks like jumping.
-    const int previewY = 820 + (catalogMotion > 0 ? catalogMotion : 0);
+    const int previewY = 805 + (catalogMotion > 0 ? catalogMotion : 0);
     if (catalogMotion >= 0)
         drawCatalogRow(nextPage, previewY, false, false, 90);
 
@@ -359,7 +362,7 @@ void drawHardwareProbe(
         (catalogType == "publicdomain" ? "PUBLIC DOMAIN / FEATURED" :
         (activeTab == 3 ? "SEARCH / RESULTS" : "MOVIES / POPULAR")),
         stremioPurple, 2);
-    const int selectedIndex = page * 4 + focusedCard;
+    const int selectedIndex = page * kCatalogPageSize + focusedCard;
     std::string featured = selectedIndex < static_cast<int>(items.size())
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
@@ -444,24 +447,23 @@ void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
 void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     int selected, int indicatorX, const char* title, const char* action) {
     const Color header = {29, 29, 39};
-    const Color focus = {196, 174, 255};
+    const Color focus = {82, 58, 142};
     const Color text = {235, 232, 244};
     drawSettingsHeader(scene, indicatorX, title);
-    scene.DrawRoundedRectangle(280, 245, 1540, 650, 30, header);
+    scene.DrawRoundedRectangle(380, 235, 1360, 675, 32, header);
     for (int index = 0; index < rowCount; ++index) {
-        const int y = 275 + index * 92;
+        const int y = 260 + index * 88;
         const bool focused = index == selected;
-        scene.DrawRoundedRectangle(310, y, 1480, 72, 18,
+        scene.DrawRoundedRectangle(415, y, 1290, 68, 34,
             focused ? focus : Color{35, 35, 46});
-        scene.DrawRoundedRectangle(330, y + 12, 48, 48, 14,
+        scene.DrawRoundedRectangle(435, y + 10, 48, 48, 24,
             focused ? Color{123, 91, 214} : Color{52, 52, 68});
         char number[8];
         snprintf(number, sizeof(number), "%02d", index + 1);
-        scene.DrawText(338, y + 23, number, text, 2);
-        scene.DrawText(410, y + 23, rows[index],
-            focused ? Color{18, 18, 24} : text, 2);
+        scene.DrawText(443, y + 21, number, text, 2);
+        scene.DrawText(515, y + 21, rows[index], text, 2);
         if (focused) {
-            scene.DrawText(1710, y + 23, ">", Color{18, 18, 24}, 2);
+            scene.DrawText(1640, y + 21, ">", text, 2);
         }
     }
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
@@ -480,7 +482,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "CLEAR SEARCH QUERY",
         useSideNavigation ? "NAVIGATION LAYOUT  LEFT SIDEBAR" :
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
-        "ABOUT STREMIO  v3.60"};
+        "ABOUT STREMIO  v3.70"};
     drawSettingsRows(scene, rows, 7, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -651,7 +653,7 @@ void drawDetails(
     scene.DrawText(1450, 48,
         catalogType == "series" ? "SERIES DETAILS" : "MOVIE DETAILS",
         muted, 2);
-    scene.DrawRoundedRectangle(90, 175, 430, 650, 30, panel);
+    scene.DrawRoundedRectangle(90, 175, 410, 650, 30, panel);
     scene.DrawRoundedRectangle(124, 209, 322, 422, 22, purple);
     if (poster && poster->valid()) {
         scene.BlitRgbRounded(130, 215, poster->width, poster->height, 18,
@@ -697,6 +699,10 @@ void drawDetails(
     }
     scene.DrawText(145, 675, "STREMIO METADATA", muted, 2);
     scene.DrawText(145, 720, "CACHED FOR FASTER REVISITS", muted, 2);
+    scene.DrawRoundedRectangle(575, 760, 285, 66, 33, purple);
+    scene.DrawText(625, 781,
+        catalogType == "series" ? "CHOOSE EPISODE" : "FIND STREAMS",
+        text, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
     drawStickHint(scene, 420, 1015, "NAVIGATE");
@@ -712,7 +718,7 @@ void drawStreams(
     const Color background = {18, 18, 24};
     const Color panel = {35, 35, 46};
     const Color purple = {123, 91, 214};
-    const Color focus = {196, 174, 255};
+    const Color focus = {82, 58, 142};
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
@@ -750,9 +756,9 @@ void drawStreams(
             (!stream.name.empty() ? stream.name : "STREAM"));
         const std::vector<std::string> labelLines = wrapText(label, 52, 2);
         if (!labelLines.empty()) scene.DrawText(230, y + 17,
-            labelLines[0].c_str(), selected ? background : text, 2);
+            labelLines[0].c_str(), text, 2);
         if (labelLines.size() > 1) scene.DrawText(230, y + 49,
-            labelLines[1].c_str(), selected ? Color{55, 50, 70} : muted, 1);
+            labelLines[1].c_str(), selected ? Color{215, 205, 235} : muted, 1);
         std::string sizeText = "SIZE UNKNOWN";
         if (stream.videoSize > 0) {
             char size[48];
@@ -772,12 +778,12 @@ void drawStreams(
         if (stream.peers >= 0)
             torrentInfo += "   PEERS " + std::to_string(stream.peers);
         scene.DrawText(230, y + 78, torrentInfo.c_str(),
-            selected ? Color{55, 50, 70} : muted, 1);
+            selected ? Color{215, 205, 235} : muted, 1);
         scene.DrawText(1510, y + 39,
             stream.name.empty() ?
                 (stream.url.empty() ? "COMPANION" : "DIRECT") :
                 shortTitle(stream.name).c_str(),
-            selected ? background : text, 2);
+            text, 2);
     }
     if (firstVisible > 0)
         scene.DrawText(1840, 290, "^", focus, 3);
@@ -2557,29 +2563,31 @@ int main() {
         } else if (shellVisible && !navigationFocused && catalogScreen) {
             if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
                 --focusedCard;
-            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 && focusedCard < 3 &&
-                catalogPage * 4 + focusedCard + 1 <
+            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
+                focusedCard < kCatalogPageSize - 1 &&
+                catalogPage * kCatalogPageSize + focusedCard + 1 <
                     static_cast<int>(catalogItems.size())) ++focusedCard;
             if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
                 const int nextPage = catalogPage + 1;
-                if ((nextPage + 1) * 4 >=
+                if ((nextPage + 1) * kCatalogPageSize >=
                         static_cast<int>(catalogItems.size()) &&
                     activeTab < 3) {
                     catalogStatus = "LOADING MORE IN BACKGROUND...";
                     startPagePrefetch();
                 }
-                if (nextPage * 4 < static_cast<int>(catalogItems.size())) {
+                if (nextPage * kCatalogPageSize <
+                    static_cast<int>(catalogItems.size())) {
                     catalogPage = nextPage;
                     // New selection enters from below; the preview row itself
                     // remains stationary until it becomes the active row.
-                    catalogMotion = 560;
-                    if (catalogPage * 4 + focusedCard >=
+                    catalogMotion = 480;
+                    if (catalogPage * kCatalogPageSize + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
-                catalogMotion = -560;
+                catalogMotion = -480;
             }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
@@ -2699,7 +2707,8 @@ int main() {
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 &&
             !navigationFocused && !detailVisible && !streamVisible &&
             catalogScreen) {
-            const int selectedIndex = catalogPage * 4 + focusedCard;
+            const int selectedIndex =
+                catalogPage * kCatalogPageSize + focusedCard;
             if (selectedIndex < static_cast<int>(catalogItems.size())) {
                 const int detailResult = fetchDetails(
                     catalogType, catalogItems[selectedIndex], details);
@@ -3146,7 +3155,8 @@ int main() {
             if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
         }
         if (activeTab < 3 && !catalogItems.empty() &&
-            static_cast<int>(catalogItems.size()) - (catalogPage + 2) * 4 <= 4)
+            static_cast<int>(catalogItems.size()) -
+                (catalogPage + 2) * kCatalogPageSize <= kCatalogPageSize)
             startPagePrefetch();
 
     }

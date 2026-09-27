@@ -234,6 +234,14 @@ sample's decode timestamp and composition offset, writes a timing sidecar, and
 passes the true DTS/PTS values to Videodec2 so B-frames are presented in the
 intended order instead of visibly stepping backward and forward.
 
+Version 3.70 freezes the validated media pipeline and concentrates on the TV
+experience. Catalogs now use six compact posters per row instead of four
+oversized cards, with balanced spacing, rounded artwork, a visible second-row
+preview, and a stable purple focus treatment. Settings use centered, compact
+pill rows instead of a large bright selection slab. Details gain a clear
+primary action, while the stream picker uses the same dark-purple focus and
+keeps all release information readable when selected.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.
