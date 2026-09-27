@@ -30,6 +30,7 @@
 #include "poster.h"
 #include "videodec2.h"
 #include "mp4_demux.h"
+#include "fmp4_stream.h"
 
 std::stringstream debugLogStream;
 
@@ -100,6 +101,33 @@ void drawBrand(Scene2D& scene, Color text) {
             headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     }
     scene.DrawText(125, 42, "STREMIO", text, 3);
+}
+
+void drawSideNavigation(Scene2D& scene, int activeTab) {
+    const Color rail = {14, 14, 21};
+    const Color selected = {42, 35, 65};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {135, 130, 151};
+    scene.DrawRectangle(0, 0, 250, kHeight, rail);
+    drawBrand(scene, text);
+    const char* labels[] = {"MOVIES", "SERIES", "PUBLIC", "SEARCH", "SETTINGS"};
+    const char* glyphs[] = {"M", "TV", "P", "?", "*"};
+    for (int index = 0; index < kTopTabCount; ++index) {
+        const int y = 170 + index * 104;
+        if (index == activeTab) {
+            scene.DrawRoundedRectangle(22, y, 206, 72, 20, selected);
+            scene.DrawRectangle(22, y + 14, 6, 44, purple);
+        }
+        scene.DrawRoundedRectangle(44, y + 16, 40, 40, 12,
+            index == activeTab ? purple : Color{38, 38, 51});
+        scene.DrawText(54, y + 24, glyphs[index], text,
+            index == 1 ? 1 : 2);
+        scene.DrawText(102, y + 24, labels[index],
+            index == activeTab ? text : muted, 2);
+    }
+    scene.DrawText(44, 890, "L1 / R1", muted, 2);
+    scene.DrawText(44, 930, "SWITCH SECTION", muted, 1);
 }
 
 void drawLine(
@@ -208,7 +236,7 @@ void drawHardwareProbe(
 
     scene.FrameBufferFill(background);
     const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
-    const int cardX[] = {120, 565, 1010, 1455};
+    const int cardX[] = {300, 700, 1100, 1500};
     const int cardY = 260 + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
                               bool showTitles, int scalePercent) {
@@ -274,40 +302,25 @@ void drawHardwareProbe(
 
     // Paint the navigation after moving rows. This is a hard content viewport:
     // outgoing cards disappear behind it instead of crossing the top menu.
-    scene.DrawRectangle(0, 0, kWidth, 240, background);
-    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
-    drawBrand(scene, text);
-    for (int index = 0; index < kTopTabCount; ++index) {
-        const int travel = index == activeTab
-            ? std::abs(tabX[activeTab] - indicatorX) : 0;
-        const int lift = std::min(8, travel / 18);
-        if (index == activeTab)
-            scene.DrawRectangle(tabX[index] - 12, 38 - lift,
-                activeTab == 2 ? 280 : 195, 48, cardMuted);
-        scene.DrawText(tabX[index], 52 - lift, kTopTabs[index],
-            index == activeTab ? text : mutedText, 2);
-    }
-    scene.DrawRectangle(indicatorX, 105, activeTab == 2 ? 255 : 170, 8,
-        stremioPurple);
-    scene.DrawText(1670, 52, "L1 / R1", mutedText, 2);
-    scene.DrawRectangle(120, 170, 690, 48, stremioPurple);
-    scene.DrawText(142, 182,
+    scene.DrawRectangle(250, 0, kWidth - 250, 240, background);
+    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
+    scene.DrawText(300, 55, "DISCOVER", mutedText, 2);
+    scene.DrawText(300, 100,
         activeTab == 3 ? "SEARCH RESULTS" :
         (catalogType == "series" ? "TOP SERIES" :
         (catalogType == "publicdomain" ? "PUBLIC DOMAIN" : "TOP MOVIES")),
-        text, 3);
+        text, 5);
     char pageText[64];
     snprintf(pageText, sizeof(pageText), "PAGE %d   %d LOADED", page + 1,
         static_cast<int>(items.size()));
-    scene.DrawText(1540, 182, pageText, mutedText, 2);
-    scene.DrawText(120, 740, status.c_str(), mutedText, 2);
-    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
+    scene.DrawText(1580, 150, pageText, mutedText, 2);
+    scene.DrawText(300, 740, status.c_str(), mutedText, 2);
+    scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
     const int shimmerX = (animationFrame * 7) % (kWidth + 180) - 180;
     scene.DrawRectangle(shimmerX, 998, 180, 3, stremioPurple);
-    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
-    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
+    drawSideNavigation(scene, activeTab);
 }
 
 void drawSearch(Scene2D& scene, const std::string& query, int filter,
@@ -318,51 +331,44 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
-    drawBrand(scene, text);
-    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
-    for (int index = 0; index < kTopTabCount; ++index) {
-        scene.DrawText(tabX[index], 52, kTopTabs[index],
-            index == 3 ? text : muted, 2);
-    }
-    scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
-    scene.DrawText(120, 185, "SEARCH", text, 4);
-    scene.DrawText(120, 245,
+    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
+    scene.DrawText(300, 55, "DISCOVER", muted, 2);
+    scene.DrawText(300, 100, "SEARCH", text, 5);
+    scene.DrawText(300, 175,
         "SEARCH MOVIES, SERIES, OR THE PUBLIC DOMAIN COLLECTION", muted, 2);
     const char* filters[] = {"MOVIES", "SERIES", "PUBLIC DOMAIN"};
     const int filterWidths[] = {250, 250, 360};
-    int filterX = 170;
+    int filterX = 300;
     for (int index = 0; index < 3; ++index) {
-        scene.DrawRoundedRectangle(filterX, 285, filterWidths[index], 62, 20,
+        scene.DrawRoundedRectangle(filterX, 225, filterWidths[index], 62, 20,
             index == filter ? purple : header);
-        scene.DrawText(filterX + 30, 304, filters[index],
+        scene.DrawText(filterX + 30, 244, filters[index],
             index == filter ? text : muted, 2);
         filterX += filterWidths[index] + 24;
     }
-    scene.DrawRoundedRectangle(170, 375, 1580, 130, 30, header);
-    scene.DrawRoundedRectangle(205, 405, 68, 68, 20, purple);
-    scene.DrawText(226, 419, "?", text, 4);
-    scene.DrawText(305, 397, "TITLE", muted, 2);
+    scene.DrawRoundedRectangle(300, 325, 1500, 130, 30, header);
+    scene.DrawRoundedRectangle(335, 355, 68, 68, 20, purple);
+    scene.DrawText(356, 369, "?", text, 4);
+    scene.DrawText(435, 347, "TITLE", muted, 2);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
-    scene.DrawText(305, 442, shown.c_str(), query.empty() ? muted : text, 3);
-    scene.DrawRoundedRectangle(170, 535, 760, 235, 26, header);
-    scene.DrawText(215, 575, "PS4 SYSTEM KEYBOARD", text, 3);
-    scene.DrawText(215, 630, "CROSS   TYPE / SELECT", muted, 2);
-    scene.DrawText(215, 670, "SQUARE  DELETE    TRIANGLE  SPACE", muted, 2);
-    scene.DrawText(215, 710, "R2      SEARCH    CIRCLE    CLOSE", muted, 2);
-    scene.DrawRoundedRectangle(970, 535, 780, 235, 26, header);
-    scene.DrawText(1015, 575, "SEARCH TIPS", text, 3);
-    scene.DrawText(1015, 630, "TRY THE FULL TITLE FOR BEST RESULTS", muted, 2);
-    scene.DrawText(1015, 670, "POSTERS LOAD PROGRESSIVELY AND CACHE", muted, 2);
-    scene.DrawText(1015, 710, "TRIANGLE REPEATS THE CURRENT SEARCH", muted, 2);
-    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
-    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
-    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
+    scene.DrawText(435, 392, shown.c_str(), query.empty() ? muted : text, 3);
+    scene.DrawRoundedRectangle(300, 505, 720, 250, 26, header);
+    scene.DrawText(345, 550, "PS4 SYSTEM KEYBOARD", text, 3);
+    scene.DrawText(345, 610, "CROSS   TYPE / SELECT", muted, 2);
+    scene.DrawText(345, 650, "SQUARE  DELETE    TRIANGLE  SPACE", muted, 2);
+    scene.DrawText(345, 690, "R2      SEARCH    CIRCLE    CLOSE", muted, 2);
+    scene.DrawRoundedRectangle(1060, 505, 740, 250, 26, header);
+    scene.DrawText(1105, 550, "SEARCH TIPS", text, 3);
+    scene.DrawText(1105, 610, "LEFT / RIGHT CHANGES THE FILTER", muted, 2);
+    scene.DrawText(1105, 650, "UP TO 24 RESULTS WITH CACHED POSTERS", muted, 2);
+    scene.DrawText(1105, 690, "OPEN RESULTS FOR DETAILS AND STREAMS", muted, 2);
+    scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
     drawButtonHint(scene, 900, 1020, '<', "FILTER");
     drawButtonHint(scene, 1080, 1020, '>', "FILTER");
     drawButtonHint(scene, 1250, 1020, 'O', "CLEAR / BACK");
     drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
     drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
+    drawSideNavigation(scene, 3);
 }
 
 void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
@@ -372,15 +378,10 @@ void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawVerticalFade(0, 0, kWidth, 180, header, 220, 0);
-    drawBrand(scene, text);
-    const int tabX[kTopTabCount] = {350, 570, 790, 1130, 1380};
-    for (int index = 0; index < kTopTabCount; ++index) {
-        scene.DrawText(tabX[index], 52, kTopTabs[index],
-            index == 4 ? text : muted, 2);
-    }
-    scene.DrawRectangle(indicatorX, 105, 170, 8, purple);
-    scene.DrawText(120, 190, title, text, 3);
+    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
+    scene.DrawText(300, 55, "STREMIO", muted, 2);
+    scene.DrawText(300, 105, title, text, 5);
+    drawSideNavigation(scene, 4);
 }
 
 void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
@@ -389,26 +390,24 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     const Color focus = {196, 174, 255};
     const Color text = {235, 232, 244};
     drawSettingsHeader(scene, indicatorX, title);
-    scene.DrawRoundedRectangle(95, 245, 1730, 650, 30, header);
+    scene.DrawRoundedRectangle(280, 245, 1540, 650, 30, header);
     for (int index = 0; index < rowCount; ++index) {
         const int y = 275 + index * 92;
         const bool focused = index == selected;
-        scene.DrawRoundedRectangle(125, y, 1670, 72, 18,
+        scene.DrawRoundedRectangle(310, y, 1480, 72, 18,
             focused ? focus : Color{35, 35, 46});
-        scene.DrawRoundedRectangle(145, y + 12, 48, 48, 14,
+        scene.DrawRoundedRectangle(330, y + 12, 48, 48, 14,
             focused ? Color{123, 91, 214} : Color{52, 52, 68});
         char number[8];
         snprintf(number, sizeof(number), "%02d", index + 1);
-        scene.DrawText(153, y + 23, number, text, 2);
-        scene.DrawText(225, y + 23, rows[index],
+        scene.DrawText(338, y + 23, number, text, 2);
+        scene.DrawText(410, y + 23, rows[index],
             focused ? Color{18, 18, 24} : text, 2);
         if (focused) {
-            scene.DrawText(1705, y + 23, ">", Color{18, 18, 24}, 2);
+            scene.DrawText(1710, y + 23, ">", Color{18, 18, 24}, 2);
         }
     }
     scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
-    drawShoulderHint(scene, 40, 1020, "L1", "LEFT TAB");
-    drawShoulderHint(scene, 260, 1020, "R1", "RIGHT TAB");
     drawButtonHint(scene, 1390, 1020, 'O', "BACK");
     drawButtonHint(scene, 1640, 1020, 'X', action);
 }
@@ -420,7 +419,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "AUDIO OUTPUT TEST  48KHZ STEREO",
         "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.20"};
+        "ABOUT STREMIO  v3.30"};
     drawSettingsRows(scene, rows, 6, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -433,25 +432,25 @@ void drawAccount(Scene2D& scene, int indicatorX, const std::string& code,
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     drawSettingsHeader(scene, indicatorX, "STREMIO ACCOUNT");
-    scene.DrawRoundedRectangle(180, 230, 1560, 650, 32, panel);
-    scene.DrawText(260, 300, signedIn ? "ACCOUNT LINKED" :
+    scene.DrawRoundedRectangle(300, 230, 1440, 650, 32, panel);
+    scene.DrawText(360, 300, signedIn ? "ACCOUNT LINKED" :
         "LINK THIS PS4 TO YOUR STREMIO ACCOUNT", text, 4);
     if (!code.empty() && !signedIn) {
-        scene.DrawText(260, 405, "OPEN ON YOUR PHONE OR COMPUTER", muted, 2);
-        scene.DrawText(260, 455, link.c_str(), purple, 3);
-        scene.DrawText(260, 535, "LINK CODE", muted, 2);
-        scene.DrawText(260, 580, code.c_str(), text, 6);
+        scene.DrawText(360, 405, "OPEN ON YOUR PHONE OR COMPUTER", muted, 2);
+        scene.DrawText(360, 455, link.c_str(), purple, 3);
+        scene.DrawText(360, 535, "LINK CODE", muted, 2);
+        scene.DrawText(360, 580, code.c_str(), text, 6);
     } else if (signedIn) {
         char addons[96];
         snprintf(addons, sizeof(addons), "%d SYNCED ADDON ENDPOINTS", addonCount);
-        scene.DrawText(260, 430, addons, purple, 3);
-        scene.DrawText(260, 500,
+        scene.DrawText(360, 430, addons, purple, 3);
+        scene.DrawText(360, 500,
             "STREAM RESULTS WILL BE REQUESTED FROM YOUR ADDONS", text, 2);
     } else {
-        scene.DrawText(260, 430,
+        scene.DrawText(360, 430,
             "PRESS CROSS TO GENERATE A SECURE LINK CODE", purple, 3);
     }
-    scene.DrawText(260, 740, status.c_str(), muted, 2);
+    scene.DrawText(360, 740, status.c_str(), muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 230);
     drawButtonHint(scene, 40, 1020, 'O', "BACK");
     drawButtonHint(scene, 1530, 1020, 'X',
@@ -696,8 +695,8 @@ void drawStreams(
     scene.DrawText(1720, 875, position, muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
-    drawButtonHint(scene, 1260, 1020, 'S', "CACHE / VIDEODEC2");
-    drawButtonHint(scene, 1630, 1020, 'X', "STREAM NOW");
+    drawButtonHint(scene, 1250, 1020, 'S', "DOWNLOAD FULL");
+    drawButtonHint(scene, 1580, 1020, 'X', "STREAM VIDEODEC2");
 }
 
 void drawStreamProgress(Scene2D& scene, int stage, uint64_t downloaded,
@@ -839,8 +838,12 @@ void notify(const char* message) {
 int playAudioOutputTest(int userId) {
     static bool initialized = false;
     if (!initialized) {
+        const int module = sceSysmoduleLoadModuleInternal(
+            ORBIS_SYSMODULE_INTERNAL_AUDIOOUT);
+        if (module < 0) return module;
         const int init = sceAudioOutInit();
-        if (init < 0) return init;
+        if (init < 0 && static_cast<unsigned int>(init) !=
+                ORBIS_AUDIO_OUT_ERROR_ALREADY_INIT) return init;
         initialized = true;
     }
     constexpr int frames = 256;
@@ -1615,6 +1618,22 @@ struct StreamPrepareJob {
     DownloadProgress progress;
 };
 
+struct HlsSegmentJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    bool active = false;
+    bool segmentWaiting = false;
+    int result = 0;
+    int nextSegment = 0;
+    int readySegment = -1;
+    uint32_t samples = 0;
+    std::string baseUrl;
+    std::string outputPath;
+    std::vector<std::string> segmentUrls;
+    Fmp4VideoConfig config;
+};
+
 struct AccountSyncJob {
     pthread_t thread = {};
     std::atomic<bool> running{false};
@@ -1697,6 +1716,55 @@ void* streamPrepareEntry(void* argument) {
     }
     if (job->result == 0)
         job->progress.stage.store(5, std::memory_order_release);
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
+
+void* hlsSegmentEntry(void* argument) {
+    HlsSegmentJob* job = static_cast<HlsSegmentJob*>(argument);
+    job->result = 0;
+    if (job->segmentUrls.empty()) {
+        std::string playlist;
+        if (downloadUrl((job->baseUrl + "video0.m3u8").c_str(),
+                1024 * 1024, playlist) <= 0) {
+            job->result = 1;
+        } else {
+            size_t position = 0;
+            while (position < playlist.size()) {
+                size_t end = playlist.find('\n', position);
+                if (end == std::string::npos) end = playlist.size();
+                std::string line = playlist.substr(position, end - position);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                if (!line.empty() && line[0] != '#' &&
+                    line.find("segment") != std::string::npos)
+                    job->segmentUrls.push_back(job->baseUrl + line);
+                position = end + 1;
+            }
+            std::string init;
+            if (job->segmentUrls.empty() ||
+                downloadUrl((job->baseUrl + "video0/init.mp4").c_str(),
+                    1024 * 1024, init) <= 0 ||
+                !parseFmp4VideoConfig(init, job->config)) job->result = 2;
+        }
+    }
+    if (job->result == 0 && job->nextSegment >= 0 &&
+        job->nextSegment < static_cast<int>(job->segmentUrls.size())) {
+        std::string segment;
+        if (downloadUrl(job->segmentUrls[job->nextSegment].c_str(),
+                32 * 1024 * 1024, segment) <= 0) {
+            job->result = 3;
+        } else {
+            job->outputPath = job->nextSegment % 2
+                ? "/data/stremio-hls-b.h264"
+                : "/data/stremio-hls-a.h264";
+            if (!convertFmp4VideoSegment(segment, job->config,
+                    job->outputPath, job->samples)) job->result = 4;
+            else job->readySegment = job->nextSegment++;
+        }
+    } else if (job->result == 0) {
+        job->result = 5;
+    }
     job->completed.store(true, std::memory_order_release);
     job->running.store(false, std::memory_order_release);
     return nullptr;
@@ -1856,6 +1924,7 @@ int main() {
     CatalogLoadJob catalogJobs[3];
     CatalogPageJob pageJob;
     StreamPrepareJob streamJob;
+    HlsSegmentJob hlsJob;
     catalogJobs[0].type = "movie";
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
@@ -1906,6 +1975,22 @@ int main() {
             job.postersProcessed.store(0, std::memory_order_release);
             job.loaded = false;
         }
+    };
+
+    auto startNextHlsSegment = [&]() {
+        if (!hlsJob.active || hlsJob.running.load(std::memory_order_acquire) ||
+            hlsJob.segmentWaiting) return false;
+        hlsJob.result = 0;
+        hlsJob.completed.store(false, std::memory_order_release);
+        hlsJob.running.store(true, std::memory_order_release);
+        pthread_attr_t attributes;
+        pthread_attr_init(&attributes);
+        pthread_attr_setstacksize(&attributes, 512 * 1024);
+        const int result = pthread_create(
+            &hlsJob.thread, &attributes, hlsSegmentEntry, &hlsJob);
+        pthread_attr_destroy(&attributes);
+        if (result != 0) hlsJob.running.store(false, std::memory_order_release);
+        return result == 0;
     };
 
     auto startAccountSync = [&]() {
@@ -2099,6 +2184,37 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (hlsJob.completed.exchange(false, std::memory_order_acq_rel)) {
+            pthread_join(hlsJob.thread, nullptr);
+            if (hlsJob.active && hlsJob.result == 0) {
+                const VideoDec2Probe::State state = videoDec2.state();
+                if (state == VideoDec2Probe::State::Idle ||
+                    state == VideoDec2Probe::State::Finished) {
+                    videoDec2.start(hlsJob.outputPath.c_str());
+                    hlsJob.segmentWaiting = false;
+                    startNextHlsSegment();
+                } else {
+                    hlsJob.segmentWaiting = true;
+                }
+            } else if (hlsJob.active) {
+                char failure[96];
+                snprintf(failure, sizeof(failure),
+                    "Stremio: Videodec2 stream stage %d", hlsJob.result);
+                notify(failure);
+                hlsJob.active = false;
+            }
+        }
+        if (hlsJob.active && hlsJob.segmentWaiting &&
+            videoDec2.state() == VideoDec2Probe::State::Finished) {
+            videoDec2.start(hlsJob.outputPath.c_str());
+            hlsJob.segmentWaiting = false;
+            startNextHlsSegment();
+        }
+        if (hlsJob.active &&
+            videoDec2.state() == VideoDec2Probe::State::Failed) {
+            hlsJob.active = false;
+            hlsJob.segmentWaiting = false;
+        }
         if (accountJob.codeReady.exchange(false,
                 std::memory_order_acq_rel)) {
             accountStatus = "WAITING FOR ACCOUNT APPROVAL...";
@@ -2224,7 +2340,11 @@ int main() {
         previousButtons = buttons;
 
         if ((pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
-            if (videoDec2.state() != VideoDec2Probe::State::Idle) {
+            if (hlsJob.active) {
+                hlsJob.active = false;
+                hlsJob.segmentWaiting = false;
+                videoDec2.stop();
+            } else if (videoDec2.state() != VideoDec2Probe::State::Idle) {
                 videoDec2.stop();
             } else if (previewVisible ||
                 avPlayer.state() != AvPlayerProbe::State::Idle) {
@@ -2494,28 +2614,27 @@ int main() {
                 resolvedUrl.compare(0, 7, "http://") == 0) {
                 if (!cacheRequested && !stream.infoHash.empty()) {
                     stopBackgroundForPlayback();
+                    avPlayer.stop();
                     videoDec2.stop();
                     previewVisible = false;
-                    previewBackgroundFrames = 0;
-                    playbackWallStart = 0;
-                    playbackTimingReported = false;
-                    playbackSourceWidth = 0;
-                    playbackSourceHeight = 0;
-                    avPlayerProbeFrames = 0;
-                    activePlaybackDecodeOnly = false;
-                    activePlaybackLegacyApi = false;
-                    progressiveStreamStartedAt = sceKernelGetProcessTime();
-                    progressiveStreamOpening = true;
+                    hlsJob.active = true;
+                    hlsJob.segmentWaiting = false;
+                    hlsJob.nextSegment = 0;
+                    hlsJob.readySegment = -1;
+                    hlsJob.segmentUrls.clear();
+                    hlsJob.config = {};
+                    char hlsBase[256];
+                    snprintf(hlsBase, sizeof(hlsBase),
+                        "http://%s/%s/%d/", companionAddress.c_str(),
+                        stream.infoHash.c_str(),
+                        stream.fileIndex >= 0 ? stream.fileIndex : -1);
+                    hlsJob.baseUrl = hlsBase;
                     streamVisible = false;
-                    notify("Stremio: opening progressive companion stream...");
-                    if (!avPlayer.start(resolvedUrl.c_str(), true, false)) {
-                        progressiveStreamOpening = false;
-                        char failure[128];
-                        snprintf(failure, sizeof(failure),
-                            "Stremio: progressive AVPlayer stage %d code 0x%08x",
-                            avPlayer.errorStage(),
-                            static_cast<unsigned int>(avPlayer.errorCode()));
-                        notify(failure);
+                    progressiveStreamStartedAt = sceKernelGetProcessTime();
+                    notify("Stremio: buffering Videodec2 stream segment...");
+                    if (!startNextHlsSegment()) {
+                        hlsJob.active = false;
+                        notify("Stremio: segmented stream worker failed");
                     }
                 } else if (streamJob.running.load(std::memory_order_acquire)) {
                     notify("Stremio: stream is already downloading");
@@ -2649,7 +2768,12 @@ int main() {
             }
             queuedPlaybackTest = -1;
         }
-        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && hlsJob.active) {
+            hlsJob.active = false;
+            hlsJob.segmentWaiting = false;
+            videoDec2.stop();
+            notify("Stremio: segmented Videodec2 stream stopped");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             streamJob.running.load(std::memory_order_acquire)) {
             streamJob.progress.cancel.store(true, std::memory_order_release);
             const int requestId = streamJob.progress.requestId.load(
@@ -2777,7 +2901,8 @@ int main() {
                 notify(timing);
                 playbackTimingReported = true;
             }
-        } else if (progressiveStreamOpening) {
+        } else if (hlsJob.active &&
+            videoDec2.state() == VideoDec2Probe::State::Idle) {
             staticScreenKey = ~0ull;
             drawStreamProgress(scene, 2, 0, 0,
                 progressiveStreamStartedAt, 0);
@@ -2887,6 +3012,10 @@ int main() {
     if (streamJob.running.load(std::memory_order_acquire) ||
         streamJob.completed.load(std::memory_order_acquire))
         pthread_join(streamJob.thread, nullptr);
+    hlsJob.active = false;
+    if (hlsJob.running.load(std::memory_order_acquire) ||
+        hlsJob.completed.load(std::memory_order_acquire))
+        pthread_join(hlsJob.thread, nullptr);
     if (accountJob.running.load(std::memory_order_acquire))
         accountJob.cancel.store(true, std::memory_order_release);
     if (accountJob.running.load(std::memory_order_acquire) ||

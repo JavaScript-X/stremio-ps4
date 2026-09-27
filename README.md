@@ -194,6 +194,18 @@ native 48 kHz signed-16-bit stereo HDMI tone test through `libSceAudioOut`,
 establishing the PS4 output path required before streamed audio demux and A/V
 synchronization are added.
 
+Version 3.30 replaces the catalog's compact top strip with a persistent
+Android-TV-style navigation rail, stronger page hierarchy, wider poster rows,
+larger section titles, and unified Search and Settings surfaces. AudioOut now
+loads its required internal PS4 system module before initialization, fixing the
+`0x809b0001` test failure. Torrent sources expose two explicit actions:
+Cross starts segmented Videodec2 streaming, while Square retains the complete
+download path. The streaming path consumes the companion's HLS/fMP4 video
+playlist, converts each roughly ten-second fragment from length-prefixed AVC
+to Annex-B, alternates two bounded cache slots, and downloads the next fragment
+while Videodec2 plays the current one. This removes Sony AVPlayer and its
+firmware-specific stage-4 URL failure from progressive torrent playback.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

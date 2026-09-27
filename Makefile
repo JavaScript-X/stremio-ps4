@@ -1,5 +1,5 @@
 TITLE      := Stremio
-VERSION    := 3.20
+VERSION    := 3.30
 TITLE_ID   := BREW00100
 CONTENT_ID := IV0000-BREW00100_00-STREMIOPS4000000
 
@@ -43,7 +43,8 @@ LDFLAGS    := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x \
 
 OBJECTS    := $(BUILDDIR)/main.o $(BUILDDIR)/avplayer.o \
 	$(BUILDDIR)/videodec2.o $(BUILDDIR)/graphics.o \
-	$(BUILDDIR)/catalog.o $(BUILDDIR)/poster.o $(BUILDDIR)/mp4_demux.o
+	$(BUILDDIR)/catalog.o $(BUILDDIR)/poster.o $(BUILDDIR)/mp4_demux.o \
+	$(BUILDDIR)/fmp4_stream.o
 PACKAGE    := $(DISTDIR)/$(CONTENT_ID).pkg
 
 .PHONY: all prepare package check clean
@@ -98,6 +99,9 @@ $(BUILDDIR)/poster.o: src/poster.cpp src/poster.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/mp4_demux.o: src/mp4_demux.cpp src/mp4_demux.h | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(BUILDDIR)/fmp4_stream.o: src/fmp4_stream.cpp src/fmp4_stream.h | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(BUILDDIR)/$(TARGET).elf: $(OBJECTS)
