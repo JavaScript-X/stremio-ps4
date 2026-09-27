@@ -169,6 +169,14 @@ companion response timeout is extended from eight seconds to two minutes for
 initial peer discovery, and failures retain the native PS4 network error code
 instead of collapsing request creation and response waiting into stage 4.
 
+Version 3.12 adds an experimental progressive torrent path. Cross hands the
+companion's LAN HTTP source directly to Sony AVPlayer, allowing playback to
+begin while the companion continues downloading and permitting AVPlayer to
+probe containers such as MKV. Square retains the complete-cache path for MP4
+H.264 sources that need the smoother direct Videodec2 renderer. Progressive
+startup has a two-minute peer-discovery window and remains cancellable with
+Circle or Options.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

@@ -682,7 +682,8 @@ void drawStreams(
     scene.DrawText(1720, 875, position, muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
-    drawButtonHint(scene, 1590, 1020, 'X', "PLAY / INSPECT");
+    drawButtonHint(scene, 1260, 1020, 'S', "CACHE / VIDEODEC2");
+    drawButtonHint(scene, 1630, 1020, 'X', "STREAM NOW");
 }
 
 void drawStreamProgress(Scene2D& scene, int stage, uint64_t downloaded,
@@ -1751,6 +1752,8 @@ int main() {
     std::string searchQuery;
     bool detailVisible = false;
     bool streamVisible = false;
+    bool progressiveStreamOpening = false;
+    uint64_t progressiveStreamStartedAt = 0;
     int detailPosterIndex = -1;
     int detailEpisodeIndex = 0;
     int focusedStream = 0;
@@ -2133,6 +2136,7 @@ int main() {
                 DEBUGLOG << "Options pressed during playback; returning to shell";
                 avPlayer.requestStop();
                 previewVisible = false;
+                progressiveStreamOpening = false;
             } else {
                 DEBUGLOG << "Options pressed from shell; Home API disabled";
             }
@@ -2355,9 +2359,12 @@ int main() {
                     "Stremio: stream lookup failed at stage %d", -streamResult);
                 notify(failure);
             }
-        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && streamVisible &&
+        } else if ((pressed & (ORBIS_PAD_BUTTON_CROSS |
+                    ORBIS_PAD_BUTTON_SQUARE)) != 0 && streamVisible &&
             focusedStream < static_cast<int>(streams.size())) {
             const StreamItem& stream = streams[focusedStream];
+            const bool cacheRequested =
+                (pressed & ORBIS_PAD_BUTTON_SQUARE) != 0;
             std::string resolvedUrl = stream.url;
             std::string cacheKey = stream.url;
             if (resolvedUrl.empty() && !stream.infoHash.empty() &&
@@ -2374,7 +2381,32 @@ int main() {
                 notify("Stremio: set Companion Server in Settings first");
             } else if (resolvedUrl.compare(0, 8, "https://") == 0 ||
                 resolvedUrl.compare(0, 7, "http://") == 0) {
-                if (streamJob.running.load(std::memory_order_acquire)) {
+                if (!cacheRequested && !stream.infoHash.empty()) {
+                    stopBackgroundForPlayback();
+                    videoDec2.stop();
+                    previewVisible = false;
+                    previewBackgroundFrames = 0;
+                    playbackWallStart = 0;
+                    playbackTimingReported = false;
+                    playbackSourceWidth = 0;
+                    playbackSourceHeight = 0;
+                    avPlayerProbeFrames = 0;
+                    activePlaybackDecodeOnly = false;
+                    activePlaybackLegacyApi = false;
+                    progressiveStreamStartedAt = sceKernelGetProcessTime();
+                    progressiveStreamOpening = true;
+                    streamVisible = false;
+                    notify("Stremio: opening progressive companion stream...");
+                    if (!avPlayer.start(resolvedUrl.c_str(), true, false)) {
+                        progressiveStreamOpening = false;
+                        char failure[128];
+                        snprintf(failure, sizeof(failure),
+                            "Stremio: progressive AVPlayer stage %d code 0x%08x",
+                            avPlayer.errorStage(),
+                            static_cast<unsigned int>(avPlayer.errorCode()));
+                        notify(failure);
+                    }
+                } else if (streamJob.running.load(std::memory_order_acquire)) {
                     notify("Stremio: stream is already downloading");
                 } else {
                     stopBackgroundForPlayback();
@@ -2420,7 +2452,7 @@ int main() {
         }
         const bool localPlaybackRequested =
             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen &&
-                !playbackDirectVideoDec2) ||
+                !streamVisible && !playbackDirectVideoDec2) ||
             (queuedPlaybackTest >= 0 && queuedPlaybackTest <= 4 &&
                 !playbackDirectVideoDec2);
         if (localPlaybackRequested) {
@@ -2457,7 +2489,8 @@ int main() {
         }
         const bool directPlaybackRequested = playbackDirectVideoDec2 &&
             (queuedPlaybackTest == 0 ||
-             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen));
+             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen &&
+              !streamVisible));
         if (directPlaybackRequested) {
             stopBackgroundForPlayback();
             avPlayer.stop();
@@ -2520,6 +2553,7 @@ int main() {
             avPlayer.state() != AvPlayerProbe::State::Idle) {
             avPlayer.requestStop();
             avPlayerProbeFrames = 0;
+            progressiveStreamOpening = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && streamVisible) {
             streamVisible = false;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && detailVisible) {
@@ -2530,15 +2564,18 @@ int main() {
         if (avPlayer.state() == AvPlayerProbe::State::Opening ||
             avPlayer.state() == AvPlayerProbe::State::Decoding) {
             ++avPlayerProbeFrames;
-            if (avPlayerProbeFrames > 1200) {
+            const int timeoutFrames = progressiveStreamOpening ? 7200 : 1200;
+            if (avPlayerProbeFrames > timeoutFrames) {
                 avPlayer.requestStop();
                 notify("Stremio: AVPlayer timed out before first frame");
+                progressiveStreamOpening = false;
             }
         }
         if (avPlayer.state() != previousPlayerState) {
             if (avPlayer.state() == AvPlayerProbe::State::Decoding) {
                 notify("Stremio: AVPlayer active; waiting for frame");
             } else if (avPlayer.state() == AvPlayerProbe::State::Passed) {
+                progressiveStreamOpening = false;
                 char result[96];
                 snprintf(result, sizeof(result),
                     "Stremio: decoded frame %ux%u",
@@ -2552,6 +2589,7 @@ int main() {
                 playbackSourceWidth = avPlayer.width();
                 playbackSourceHeight = avPlayer.height();
             } else if (avPlayer.state() == AvPlayerProbe::State::Failed) {
+                progressiveStreamOpening = false;
                 char result[128];
                 snprintf(result, sizeof(result),
                     "Stremio: AVPlayer stage %d, code 0x%08x",
@@ -2621,6 +2659,10 @@ int main() {
                 notify(timing);
                 playbackTimingReported = true;
             }
+        } else if (progressiveStreamOpening) {
+            staticScreenKey = ~0ull;
+            drawStreamProgress(scene, 2, 0, 0,
+                progressiveStreamStartedAt, 0);
         } else if (streamJob.running.load(std::memory_order_acquire)) {
             staticScreenKey = ~0ull;
             drawStreamProgress(scene,
