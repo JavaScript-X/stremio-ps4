@@ -177,6 +177,12 @@ H.264 sources that need the smoother direct Videodec2 renderer. Progressive
 startup has a two-minute peer-discovery window and remains cancellable with
 Circle or Options.
 
+Version 3.13 makes the complete-cache path cancellable. Circle aborts the
+active PS4 HTTP request, removes the partial cache file, and returns control
+without waiting for the full torrent. The experimental AVPlayer path remains
+available only as a compatibility diagnostic while native fragmented-MP4
+segment ingestion for Videodec2 is developed.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

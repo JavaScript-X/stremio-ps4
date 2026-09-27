@@ -741,6 +741,8 @@ void drawStreamProgress(Scene2D& scene, int stage, uint64_t downloaded,
             static_cast<unsigned int>(nativeError));
         scene.DrawText(360, 680, error, muted, 2);
     }
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
+    drawButtonHint(scene, 40, 1020, 'O', "CANCEL");
 }
 
 void drawDecodedPreview(
@@ -1134,6 +1136,8 @@ struct DownloadProgress {
     std::atomic<uint64_t> downloaded{0};
     std::atomic<uint64_t> expected{0};
     std::atomic<int> nativeError{0};
+    std::atomic<int> requestId{-1};
+    std::atomic<bool> cancel{false};
     uint64_t startedAt = 0;
 };
 
@@ -1145,6 +1149,8 @@ int downloadUrlToFile(const char* url, const std::string& path,
         progress->downloaded.store(0, std::memory_order_release);
         progress->expected.store(0, std::memory_order_release);
         progress->nativeError.store(0, std::memory_order_release);
+        progress->requestId.store(-1, std::memory_order_release);
+        progress->cancel.store(false, std::memory_order_release);
         progress->startedAt = sceKernelGetProcessTime();
     }
     const std::string temporary = path + ".part";
@@ -1162,6 +1168,8 @@ int downloadUrlToFile(const char* url, const std::string& path,
     int connectionId = sceHttpCreateConnectionWithURL(templateId, url, false);
     int requestId = connectionId >= 0 ? sceHttpCreateRequestWithURL(
         connectionId, ORBIS_METHOD_GET, url, 0) : -1;
+    if (progress) progress->requestId.store(
+        requestId, std::memory_order_release);
     int result = -4;
     size_t total = 0;
     if (requestId < 0) {
@@ -1195,6 +1203,11 @@ int downloadUrlToFile(const char* url, const std::string& path,
             char chunk[8 * 1024];
             result = 0;
             for (;;) {
+                if (progress && progress->cancel.load(
+                        std::memory_order_acquire)) {
+                    result = -13;
+                    break;
+                }
                 const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
                 if (bytes < 0) { result = -5; break; }
                 if (!bytes) break;
@@ -1216,6 +1229,7 @@ int downloadUrlToFile(const char* url, const std::string& path,
         }
     }
     if (requestId >= 0) sceHttpDeleteRequest(requestId);
+    if (progress) progress->requestId.store(-1, std::memory_order_release);
     if (connectionId >= 0) sceHttpDeleteConnection(connectionId);
     sceHttpDeleteTemplate(templateId);
     if (fclose(output) != 0 && result == 0) result = -8;
@@ -2038,7 +2052,9 @@ int main() {
         }
         if (streamJob.completed.exchange(false, std::memory_order_acq_rel)) {
             pthread_join(streamJob.thread, nullptr);
-            if (streamJob.result == 0) {
+            if (streamJob.progress.cancel.load(std::memory_order_acquire)) {
+                notify("Stremio: stream preparation cancelled");
+            } else if (streamJob.result == 0) {
                 char ready[160];
                 if (streamJob.media.width && streamJob.media.height) {
                     snprintf(ready, sizeof(ready),
@@ -2538,7 +2554,14 @@ int main() {
             }
             queuedPlaybackTest = -1;
         }
-        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
+        if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
+            streamJob.running.load(std::memory_order_acquire)) {
+            streamJob.progress.cancel.store(true, std::memory_order_release);
+            const int requestId = streamJob.progress.requestId.load(
+                std::memory_order_acquire);
+            if (requestId >= 0) sceHttpAbortRequest(requestId);
+            notify("Stremio: cancelling stream preparation...");
+        } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
             avPlayer.requestStop();
             avPlayerProbeFrames = 0;
             previewVisible = false;
