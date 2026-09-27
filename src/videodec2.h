@@ -22,6 +22,7 @@ public:
     uint32_t measuredFpsTimesTen() const { return measuredFpsTimesTen_; }
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
+    uint32_t submittedAccessUnits() const { return submittedAccessUnits_; }
 
 private:
     static void* threadEntry(void* value);
@@ -34,6 +35,7 @@ private:
     uint32_t measuredFpsTimesTen_ = 0;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
+    uint32_t submittedAccessUnits_ = 0;
     const char* path_ = nullptr;
     pthread_t thread_ = {};
     volatile bool running_ = false;

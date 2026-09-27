@@ -397,7 +397,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v2.82"};
+        "ABOUT STREMIO  v2.83"};
     drawSettingsRows(scene, rows, 3, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -433,8 +433,9 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder) {
         "SAFE DECODE-ONLY MODE - NO FIRMWARE VIDEOOUT PATCHES", muted, 2);
     char metrics[160];
     snprintf(metrics, sizeof(metrics),
-        "OUTPUT %ux%u    FRAMES %llu    DECODE %u.%u FPS",
+        "OUTPUT %ux%u   AU %u   FRAMES %llu   DECODE %u.%u FPS",
         decoder.width(), decoder.height(),
+        decoder.submittedAccessUnits(),
         static_cast<unsigned long long>(decoder.decodedFrames()),
         decoder.measuredFpsTimesTen() / 10,
         decoder.measuredFpsTimesTen() % 10);
@@ -1831,6 +1832,10 @@ int main() {
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && previewVisible) {
             avPlayer.requestStop();
             avPlayerProbeFrames = 0;
+            previewVisible = false;
+            previewPixels.clear();
+            previewWidth = 0;
+            previewHeight = 0;
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             videoDec2.state() != VideoDec2Probe::State::Idle) {
             videoDec2.stop();
@@ -1900,9 +1905,10 @@ int main() {
                 } else if (videoDec2.state() == VideoDec2Probe::State::Failed) {
                     char result[128];
                     snprintf(result, sizeof(result),
-                        "Stremio: Videodec2 stage %d code 0x%08x",
+                        "Stremio: Videodec2 stage %d code 0x%08x AU %u",
                         videoDec2.errorStage(),
-                        static_cast<unsigned int>(videoDec2.errorCode()));
+                        static_cast<unsigned int>(videoDec2.errorCode()),
+                        videoDec2.submittedAccessUnits());
                     notify(result);
                 }
                 reportedVideoDec2State = videoDec2.state();

@@ -129,6 +129,10 @@ Version 2.82 makes Circle return to the shell immediately while AVPlayer's
 owning worker completes Stop/Close asynchronously. The direct test now uses a
 Constrained Baseline Level 4.0 sequence with matching decoder profile/level and
 Onion-backed CPU work memory to address firmware 13.02 INVALID_SEQUENCE errors.
+Version 2.83 fixes the actual player-screen return flag for both rendered and
+decode-only AVPlayer modes. It also regenerates the direct Annex-B probe with
+the correct bitstream-filter order: SPS and PPS headers are now preserved and
+repeated with IDR frames instead of sending an undecodable headerless stream.
 The playback pipeline keeps reusable conversion surfaces, transfers a preview
 only when a new decoded frame exists, and gives AVPlayer a six-frame output
 queue. These changes remove per-frame heap churn and redundant 60 Hz copies

@@ -230,6 +230,7 @@ bool VideoDec2Probe::start(const char* annexBPath) {
     measuredFpsTimesTen_ = 0;
     width_ = 0;
     height_ = 0;
+    submittedAccessUnits_ = 0;
     stopRequested_ = false;
     running_ = pthread_create(&thread_, nullptr, threadEntry, this) == 0;
     if (!running_) { state_ = State::Failed; errorStage_ = 1; return false; }
@@ -351,6 +352,7 @@ void VideoDec2Probe::decodeLoop() {
                 (frameIndex % kFrameBuffers) * memory.maxFrameBufferSize;
             frame.frameBufferSize = memory.maxFrameBufferSize;
             OutputInfo output = {}; output.thisSize = sizeof(output);
+            submittedAccessUnits_ = static_cast<uint32_t>(index + 1);
             errorCode_ = api.decode(decoder, &input, &frame, &output);
             if (errorCode_ < 0) { errorStage_ = 19; state_ = State::Failed; break; }
             ++frameIndex;
