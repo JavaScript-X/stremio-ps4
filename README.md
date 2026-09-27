@@ -191,11 +191,25 @@ Controller controls:
 | M4 | Companion Stremio server integration | Planned |
 | M5 | Library, progress sync, subtitles and settings | Planned |
 
-Version 3.00 intentionally supports direct HTTPS MP4 files with an H.264/AVC
-video track first. WebM, MKV, HEVC, DASH/HLS manifests, magnet links, audio
+Version 3.01 supports direct HTTPS MP4 files with an H.264/AVC
+video track first. WebM, MKV, HEVC, DASH/HLS manifests, a built-in torrent
+engine, audio
 playback, subtitles, and protected streams are detected as future compatibility
-work; they are not silently treated as supported. Cached media is capped at
-512 MiB per download.
+work; they are not silently treated as supported. Torrent-only addon results
+can be resolved by entering a Stremio streaming server on the same LAN in
+**Settings > Companion Server** (for example `192.168.1.50:11470`). The PS4
+then requests `/{infoHash}/{fileIdx}` from that server before demuxing the cached
+MP4. Cached media is capped at 1900 MiB per download.
+
+The official companion can be started on a PC with Docker:
+
+```sh
+docker compose -f docker-compose.companion.yml up -d
+```
+
+Allow TCP port `11470` through the PC firewall, find the PC's LAN IPv4 address,
+and enter `IP:11470` in the PS4 app. Keep the companion running while the PS4
+resolves a torrent. Only use sources that you are legally permitted to access.
 
 See [docs/architecture.md](docs/architecture.md) for the intended design and
 [docs/testing-m0.md](docs/testing-m0.md) for the first console test.

@@ -68,7 +68,8 @@ constexpr size_t kMaximumDemoVideoBytes = 16 * 1024 * 1024;
 constexpr size_t kLegalRemoteVideoBytes = 4372373;
 constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
-constexpr size_t kMaximumStreamBytes = 512 * 1024 * 1024;
+constexpr size_t kMaximumStreamBytes = size_t(1900) * 1024 * 1024;
+constexpr const char* kCompanionConfigPath = "/data/stremio-companion.txt";
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
 constexpr int kCatalogBatchSize = 8;
@@ -398,9 +399,10 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
 void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
         "PLAYBACK TESTS",
+        "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.00"};
-    drawSettingsRows(scene, rows, 3, selected, indicatorX,
+        "ABOUT STREMIO  v3.01"};
+    drawSettingsRows(scene, rows, 4, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
 
@@ -743,7 +745,8 @@ uint32_t readButtons(int pad) {
     return buttons;
 }
 
-bool openSystemSearchKeyboard(int userId, std::string& query) {
+bool openSystemSearchKeyboard(int userId, std::string& query,
+        bool companionMode = false) {
     if (!imeDialogInitialized) {
         if (sceSysmoduleLoadModuleInternal(
                 ORBIS_SYSMODULE_INTERNAL_COMMON_DIALOG) < 0 ||
@@ -780,9 +783,13 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
     }
     static const uint16_t title[] = {
         'S','e','a','r','c','h',' ','S','t','r','e','m','i','o',0};
+    static const uint16_t companionTitle[] = {
+        'C','o','m','p','a','n','i','o','n',' ','s','e','r','v','e','r',0};
     static const uint16_t placeholder[] = {
         'M','o','v','i','e',' ','o','r',' ','s','e','r','i','e','s',' ',
         't','i','t','l','e',0};
+    static const uint16_t companionPlaceholder[] = {
+        '1','9','2','.','1','6','8','.','1','.','5','0',':','1','1','4','7','0',0};
     OrbisImeDialogSetting settings = {};
     settings.userId = static_cast<uint32_t>(userId);
     // Use Sony's standard search-dialog configuration. The system keyboard
@@ -796,8 +803,10 @@ bool openSystemSearchKeyboard(int userId, std::string& query) {
     settings.posy = 540.0f;
     settings.horizontalAlignment = ORBIS_H_CENTER;
     settings.verticalAlignment = ORBIS_V_CENTER;
-    settings.placeholder = reinterpret_cast<const wchar_t*>(placeholder);
-    settings.title = reinterpret_cast<const wchar_t*>(title);
+    settings.placeholder = reinterpret_cast<const wchar_t*>(
+        companionMode ? companionPlaceholder : placeholder);
+    settings.title = reinterpret_cast<const wchar_t*>(
+        companionMode ? companionTitle : title);
     if (sceImeDialogInit(&settings, nullptr) < 0) return false;
 
     OrbisDialogStatus status = sceImeDialogGetStatus();
@@ -1065,6 +1074,26 @@ bool readCachedFile(const std::string& path, size_t maximum,
         contents.size();
     fclose(file);
     return okay;
+}
+
+bool normalizeCompanionAddress(std::string& address) {
+    while (!address.empty() && std::isspace(
+            static_cast<unsigned char>(address.back()))) address.pop_back();
+    size_t first = 0;
+    while (first < address.size() && std::isspace(
+            static_cast<unsigned char>(address[first]))) ++first;
+    address.erase(0, first);
+    const std::string http = "http://";
+    if (address.compare(0, http.size(), http) == 0)
+        address.erase(0, http.size());
+    while (!address.empty() && address.back() == '/') address.pop_back();
+    if (address.empty() || address.size() > 80) return false;
+    for (unsigned char value : address) {
+        if (!std::isalnum(value) && value != '.' && value != ':' &&
+            value != '-') return false;
+    }
+    if (address.find(':') == std::string::npos) address += ":11470";
+    return true;
 }
 
 void writeCachedFile(const std::string& path, const std::string& contents) {
@@ -1387,6 +1416,9 @@ int main() {
     int focusedStream = 0;
     MetaDetails details;
     std::vector<StreamItem> streams;
+    std::string companionAddress;
+    readCachedFile(kCompanionConfigPath, 96, companionAddress);
+    normalizeCompanionAddress(companionAddress);
     scene.SetActiveFrameBuffer(0);
     loadBundledImage(
         "/app0/assets/stremio-official.png", 96, 96, headerLogo);
@@ -1769,7 +1801,7 @@ int main() {
                 catalogPosters.clear();
             }
         } else if (shellVisible && activeTab == 4) {
-            const int maximumSelection = settingsPage == 0 ? 2 :
+            const int maximumSelection = settingsPage == 0 ? 3 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
@@ -1786,10 +1818,26 @@ int main() {
                     // Direct Videodec2 is the validated 1080p default.
                     settingsSelection = 3;
                 } else if (settingsPage == 0 && settingsSelection == 1) {
+                    while ((readButtons(pad) & ORBIS_PAD_BUTTON_CROSS) != 0 &&
+                        !exitRequested) sceKernelUsleep(8000);
+                    if (pad >= 0) { scePadClose(pad); pad = -1; }
+                    std::string entered = companionAddress;
+                    const bool accepted = openSystemSearchKeyboard(
+                        userId, entered, true);
+                    if (accepted && normalizeCompanionAddress(entered)) {
+                        companionAddress = entered;
+                        writeCachedFile(kCompanionConfigPath, companionAddress);
+                        notify("Stremio: companion server address saved");
+                    } else if (accepted) {
+                        notify("Stremio: invalid companion address");
+                    }
+                    pad = scePadOpen(userId, 0, 0, nullptr);
+                    previousButtons = readButtons(pad);
+                } else if (settingsPage == 0 && settingsSelection == 2) {
                     searchQuery.clear();
                     searchShowingResults = false;
                     notify("Stremio: search query cleared");
-                } else if (settingsPage == 0 && settingsSelection == 2) {
+                } else if (settingsPage == 0 && settingsSelection == 3) {
                     settingsPage = 3;
                     settingsSelection = 0;
                 } else if (settingsPage == 1) {
@@ -1877,16 +1925,29 @@ int main() {
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && streamVisible &&
             focusedStream < static_cast<int>(streams.size())) {
             const StreamItem& stream = streams[focusedStream];
-            if (stream.url.empty()) {
-                notify("Stremio: torrent stream needs the companion service");
-            } else if (stream.url.compare(0, 8, "https://") == 0) {
+            std::string resolvedUrl = stream.url;
+            std::string cacheKey = stream.url;
+            if (resolvedUrl.empty() && !stream.infoHash.empty() &&
+                !companionAddress.empty()) {
+                char endpoint[256];
+                snprintf(endpoint, sizeof(endpoint), "http://%s/%s/%d",
+                    companionAddress.c_str(), stream.infoHash.c_str(),
+                    stream.fileIndex >= 0 ? stream.fileIndex : -1);
+                resolvedUrl = endpoint;
+                cacheKey = stream.infoHash + ":" +
+                    std::to_string(stream.fileIndex);
+            }
+            if (resolvedUrl.empty() && !stream.infoHash.empty()) {
+                notify("Stremio: set Companion Server in Settings first");
+            } else if (resolvedUrl.compare(0, 8, "https://") == 0 ||
+                resolvedUrl.compare(0, 7, "http://") == 0) {
                 if (streamJob.running.load(std::memory_order_acquire)) {
                     notify("Stremio: stream is already downloading");
                 } else {
                     stopBackgroundForPlayback();
-                    streamJob.url = stream.url;
-                    streamJob.sourcePath = cachePath("media", stream.url, "mp4");
-                    streamJob.annexBPath = cachePath("video", stream.url, "h264");
+                    streamJob.url = resolvedUrl;
+                    streamJob.sourcePath = cachePath("media", cacheKey, "mp4");
+                    streamJob.annexBPath = cachePath("video", cacheKey, "h264");
                     streamJob.result = 0;
                     streamJob.media = {};
                     streamJob.completed.store(false, std::memory_order_release);
@@ -1896,11 +1957,13 @@ int main() {
                         streamJob.running.store(false, std::memory_order_release);
                         notify("Stremio: stream worker could not start");
                     } else {
-                        notify("Stremio: caching HTTPS stream in background...");
+                        notify(stream.infoHash.empty()
+                            ? "Stremio: caching HTTPS stream in background..."
+                            : "Stremio: companion is resolving torrent...");
                     }
                 }
             } else {
-                notify("Stremio: rejected non-HTTPS direct stream");
+                notify("Stremio: rejected unsupported stream URL");
             }
         }
         if (!previewVisible && activeTab < 3 &&

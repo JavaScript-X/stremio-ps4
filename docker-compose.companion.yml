@@ -1,0 +1,16 @@
+services:
+  stremio-companion:
+    image: stremio/server:latest
+    container_name: stremio-ps4-companion
+    restart: unless-stopped
+    environment:
+      NO_CORS: "1"
+      APP_PATH: /config
+    ports:
+      - "11470:11470"
+      - "12470:12470"
+    volumes:
+      - stremio-companion-data:/config
+
+volumes:
+  stremio-companion-data:
