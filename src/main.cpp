@@ -70,6 +70,10 @@ constexpr size_t kMaximumCatalogBytes = 1024 * 1024;
 constexpr size_t kMaximumPosterBytes = 2 * 1024 * 1024;
 constexpr size_t kMaximumStreamBytes = size_t(1900) * 1024 * 1024;
 constexpr const char* kCompanionConfigPath = "/data/stremio-companion.txt";
+constexpr const char* kAuthKeyPath = "/data/stremio-auth-key.txt";
+constexpr const char* kAddonCollectionPath = "/data/stremio-addons.json";
+constexpr const char* kLinkCreateUrl =
+    "https://link.stremio.com/api/v2/create?type=Create";
 constexpr int kPosterWidth = 310;
 constexpr int kPosterHeight = 410;
 constexpr int kCatalogBatchSize = 8;
@@ -398,12 +402,46 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
 
 void drawSettings(Scene2D& scene, int selected, int indicatorX) {
     const char* rows[] = {
+        "STREMIO ACCOUNT AND SYNCED ADDONS",
         "PLAYBACK TESTS",
         "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.02"};
-    drawSettingsRows(scene, rows, 4, selected, indicatorX,
+        "ABOUT STREMIO  v3.10"};
+    drawSettingsRows(scene, rows, 5, selected, indicatorX,
         "SETTINGS", "OPEN");
+}
+
+void drawAccount(Scene2D& scene, int indicatorX, const std::string& code,
+        const std::string& link, const std::string& status,
+        int addonCount, bool signedIn) {
+    const Color panel = {29, 29, 39};
+    const Color purple = {123, 91, 214};
+    const Color text = {235, 232, 244};
+    const Color muted = {164, 158, 181};
+    drawSettingsHeader(scene, indicatorX, "STREMIO ACCOUNT");
+    scene.DrawRoundedRectangle(180, 230, 1560, 650, 32, panel);
+    scene.DrawText(260, 300, signedIn ? "ACCOUNT LINKED" :
+        "LINK THIS PS4 TO YOUR STREMIO ACCOUNT", text, 4);
+    if (!code.empty() && !signedIn) {
+        scene.DrawText(260, 405, "OPEN ON YOUR PHONE OR COMPUTER", muted, 2);
+        scene.DrawText(260, 455, link.c_str(), purple, 3);
+        scene.DrawText(260, 535, "LINK CODE", muted, 2);
+        scene.DrawText(260, 580, code.c_str(), text, 6);
+    } else if (signedIn) {
+        char addons[96];
+        snprintf(addons, sizeof(addons), "%d SYNCED ADDON ENDPOINTS", addonCount);
+        scene.DrawText(260, 430, addons, purple, 3);
+        scene.DrawText(260, 500,
+            "STREAM RESULTS WILL BE REQUESTED FROM YOUR ADDONS", text, 2);
+    } else {
+        scene.DrawText(260, 430,
+            "PRESS CROSS TO GENERATE A SECURE LINK CODE", purple, 3);
+    }
+    scene.DrawText(260, 740, status.c_str(), muted, 2);
+    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 230);
+    drawButtonHint(scene, 40, 1020, 'O', "BACK");
+    drawButtonHint(scene, 1530, 1020, 'X',
+        signedIn ? "SYNC ADDONS" : "LINK ACCOUNT");
 }
 
 void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
@@ -935,6 +973,90 @@ int downloadUrl(const char* url, size_t maximumBytes, std::string& body) {
     return result;
 }
 
+int postJson(const char* url, const std::string& json,
+        size_t maximumBytes, std::string& body) {
+    body.clear();
+    if (!url || !initializeHttp()) return -1;
+    int templateId = sceHttpCreateTemplate(httpContextId,
+        "StremioPS4/3.10", ORBIS_HTTP_VERSION_1_1, 1);
+    if (templateId < 0) return -2;
+    sceHttpSetResolveTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetConnectTimeOut(templateId, kHttpTimeoutUsec);
+    sceHttpSetSendTimeOut(templateId, kHttpTimeoutUsec);
+    int connectionId = sceHttpCreateConnectionWithURL(templateId, url, false);
+    int requestId = connectionId >= 0 ? sceHttpCreateRequestWithURL(
+        connectionId, ORBIS_METHOD_POST, url, json.size()) : -1;
+    int result = -3;
+    if (requestId >= 0) {
+        sceHttpAddRequestHeader(requestId, "Content-Type",
+            "application/json", 0);
+        if (sceHttpSendRequest(requestId, json.data(), json.size()) >= 0) {
+            int status = 0;
+            if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
+                char chunk[8192]; result = 0;
+                for (;;) {
+                    const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
+                    if (bytes < 0) { result = -4; break; }
+                    if (!bytes) { result = static_cast<int>(body.size()); break; }
+                    if (body.size() + static_cast<size_t>(bytes) > maximumBytes) {
+                        result = -5; break;
+                    }
+                    body.append(chunk, static_cast<size_t>(bytes));
+                }
+            } else if (status > 0) result = -status;
+        }
+    }
+    if (requestId >= 0) sceHttpDeleteRequest(requestId);
+    if (connectionId >= 0) sceHttpDeleteConnection(connectionId);
+    sceHttpDeleteTemplate(templateId);
+    return result;
+}
+
+bool jsonStringValue(const std::string& json, const std::string& key,
+        std::string& value, size_t from = 0) {
+    const std::string marker = "\"" + key + "\"";
+    size_t at = json.find(marker, from);
+    if (at == std::string::npos) return false;
+    at = json.find(':', at + marker.size());
+    if (at == std::string::npos) return false;
+    at = json.find('"', at + 1);
+    if (at == std::string::npos) return false;
+    value.clear();
+    for (++at; at < json.size(); ++at) {
+        const char c = json[at];
+        if (c == '"') return true;
+        if (c == '\\' && at + 1 < json.size()) {
+            const char escaped = json[++at];
+            if (escaped == 'n') value.push_back('\n');
+            else if (escaped == 'r') value.push_back('\r');
+            else if (escaped == 't') value.push_back('\t');
+            else value.push_back(escaped);
+        } else value.push_back(c);
+    }
+    return false;
+}
+
+std::vector<std::string> addonTransportUrls(const std::string& json) {
+    std::vector<std::string> urls;
+    size_t position = 0;
+    for (;;) {
+        const size_t marker = json.find("\"transportUrl\"", position);
+        if (marker == std::string::npos) break;
+        std::string url;
+        if (jsonStringValue(json, "transportUrl", url, marker) &&
+            (url.compare(0, 8, "https://") == 0 ||
+             url.compare(0, 7, "http://") == 0) &&
+            std::find(urls.begin(), urls.end(), url) == urls.end()) {
+            if (url.size() >= 14 &&
+                url.compare(url.size() - 14, 14, "/manifest.json") == 0)
+                url.erase(url.size() - 14);
+            urls.push_back(url);
+        }
+        position = marker + 14;
+    }
+    return urls;
+}
+
 int downloadUrlToFile(const char* url, const std::string& path,
         size_t maximumBytes) {
     if (!url || !initializeHttp()) return -1;
@@ -1190,6 +1312,37 @@ int fetchPublicDomainStreams(
         ? static_cast<int>(streams.size()) : -8;
 }
 
+int fetchAddonStreams(
+    const std::vector<std::string>& addonUrls,
+    const std::string& type,
+    const std::string& videoId,
+    std::vector<StreamItem>& streams) {
+    streams.clear();
+    if ((type != "movie" && type != "series") ||
+        !isSafeMetadataId(videoId)) return -10;
+    int successfulAddons = 0;
+    for (const std::string& base : addonUrls) {
+        if (streams.size() >= 32) break;
+        // Account collections can contain desktop-only local addons. Never
+        // redirect a PS4 request to its own loopback address.
+        if (base.find("localhost") != std::string::npos ||
+            base.find("127.0.0.1") != std::string::npos ||
+            base.find("[::1]") != std::string::npos) continue;
+        const std::string url = base + "/stream/" + type + "/" +
+            urlEncode(videoId) + ".json";
+        std::string body;
+        if (downloadUrl(url.c_str(), kMaximumCatalogBytes, body) <= 0)
+            continue;
+        std::vector<StreamItem> addonStreams;
+        if (!parseStreamItems(body, addonStreams, 32 - streams.size()))
+            continue;
+        ++successfulAddons;
+        streams.insert(streams.end(), addonStreams.begin(), addonStreams.end());
+    }
+    if (!streams.empty()) return static_cast<int>(streams.size());
+    return successfulAddons ? -8 : -9;
+}
+
 int fetchPosters(
     const std::vector<CatalogItem>& items,
     std::vector<PosterImage>& posters) {
@@ -1271,6 +1424,64 @@ struct StreamPrepareJob {
     bool demuxReused = false;
     Mp4MediaInfo media;
 };
+
+struct AccountSyncJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    std::atomic<bool> codeReady{false};
+    std::atomic<bool> cancel{false};
+    std::string code;
+    std::string link;
+    std::string authKey;
+    std::string addonJson;
+    std::vector<std::string> addonUrls;
+    int result = 0;
+};
+
+void* accountSyncEntry(void* argument) {
+    AccountSyncJob* job = static_cast<AccountSyncJob*>(argument);
+    job->result = 0;
+    if (job->authKey.empty()) {
+        std::string response;
+        if (downloadUrl(kLinkCreateUrl, 64 * 1024, response) <= 0 ||
+            !jsonStringValue(response, "code", job->code) ||
+            !jsonStringValue(response, "link", job->link)) {
+            job->result = 1;
+        } else {
+            job->codeReady.store(true, std::memory_order_release);
+            for (int attempt = 0; attempt < 150 &&
+                    !job->cancel.load(std::memory_order_acquire); ++attempt) {
+                char url[256];
+                snprintf(url, sizeof(url),
+                    "https://link.stremio.com/api/v2/read?type=Read&code=%s",
+                    job->code.c_str());
+                response.clear();
+                if (downloadUrl(url, 64 * 1024, response) > 0 &&
+                    jsonStringValue(response, "authKey", job->authKey)) break;
+                sceKernelUsleep(2000000);
+            }
+            if (job->authKey.empty() && !job->cancel.load(
+                    std::memory_order_acquire)) job->result = 2;
+        }
+    }
+    if (!job->authKey.empty() && !job->cancel.load(
+            std::memory_order_acquire)) {
+        const std::string body = "{\"authKey\":\"" + job->authKey +
+            "\",\"update\":true,\"addFromURL\":[]}";
+        if (postJson("https://api.strem.io/api/addonCollectionGet", body,
+                4 * 1024 * 1024, job->addonJson) <= 0) {
+            job->result = 3;
+        } else {
+            job->addonUrls = addonTransportUrls(job->addonJson);
+            writeCachedFile(kAuthKeyPath, job->authKey);
+            writeCachedFile(kAddonCollectionPath, job->addonJson);
+        }
+    }
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
 
 void* streamPrepareEntry(void* argument) {
     StreamPrepareJob* job = static_cast<StreamPrepareJob*>(argument);
@@ -1422,6 +1633,21 @@ int main() {
     std::string companionAddress;
     readCachedFile(kCompanionConfigPath, 96, companionAddress);
     normalizeCompanionAddress(companionAddress);
+    AccountSyncJob accountJob;
+    std::string authKey;
+    std::string addonCollectionJson;
+    std::string accountStatus = "NOT LINKED";
+    readCachedFile(kAuthKeyPath, 4096, authKey);
+    readCachedFile(kAddonCollectionPath, 4 * 1024 * 1024,
+        addonCollectionJson);
+    std::vector<std::string> addonUrls =
+        addonTransportUrls(addonCollectionJson);
+    if (!authKey.empty()) {
+        char status[96];
+        snprintf(status, sizeof(status), "LINKED   %d ADDONS CACHED",
+            static_cast<int>(addonUrls.size()));
+        accountStatus = status;
+    }
     scene.SetActiveFrameBuffer(0);
     loadBundledImage(
         "/app0/assets/stremio-official.png", 96, 96, headerLogo);
@@ -1448,6 +1674,7 @@ int main() {
     auto startPagePrefetch = [&]() {
         if (activeTab >= 3 || pageJob.running.load(std::memory_order_acquire) ||
             pageJob.completed.load(std::memory_order_acquire) ||
+            accountJob.running.load(std::memory_order_acquire) ||
             catalogWorkersBusy() || catalogItems.empty() ||
             avPlayer.state() != AvPlayerProbe::State::Idle) return;
         pageJob.type = catalogType;
@@ -1482,6 +1709,37 @@ int main() {
         }
     };
 
+    auto startAccountSync = [&]() {
+        if (accountJob.running.load(std::memory_order_acquire)) return;
+        if (accountJob.completed.load(std::memory_order_acquire)) {
+            pthread_join(accountJob.thread, nullptr);
+            accountJob.completed.store(false, std::memory_order_release);
+        }
+        stopBackgroundForPlayback();
+        accountJob.code.clear();
+        accountJob.link.clear();
+        accountJob.authKey = authKey;
+        accountJob.addonJson.clear();
+        accountJob.addonUrls.clear();
+        accountJob.result = 0;
+        accountJob.cancel.store(false, std::memory_order_release);
+        accountJob.codeReady.store(false, std::memory_order_release);
+        accountJob.completed.store(false, std::memory_order_release);
+        accountJob.running.store(true, std::memory_order_release);
+        accountStatus = authKey.empty()
+            ? "CREATING SECURE LINK CODE..."
+            : "REFRESHING ADDON COLLECTION...";
+        pthread_attr_t attributes;
+        pthread_attr_init(&attributes);
+        pthread_attr_setstacksize(&attributes, 512 * 1024);
+        if (pthread_create(&accountJob.thread, &attributes,
+                accountSyncEntry, &accountJob) != 0) {
+            accountJob.running.store(false, std::memory_order_release);
+            accountStatus = "ACCOUNT WORKER COULD NOT START";
+        }
+        pthread_attr_destroy(&attributes);
+    };
+
     auto storeActiveCatalog = [&]() {
         if (activeCatalogDataTab < 0 || activeCatalogDataTab >= 3) return;
         CatalogLoadJob& cache = catalogJobs[activeCatalogDataTab];
@@ -1506,6 +1764,7 @@ int main() {
         if (tab < 0 || tab >= 3) return false;
         CatalogLoadJob& job = catalogJobs[tab];
         if (job.running.load(std::memory_order_acquire)) return true;
+        if (accountJob.running.load(std::memory_order_acquire)) return false;
         if (pageJob.running.load(std::memory_order_acquire)) return false;
         if (!force && job.loaded) return true;
         // Keep the shared PS4 HTTP contexts single-threaded. A rapidly selected
@@ -1618,6 +1877,36 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (accountJob.codeReady.exchange(false,
+                std::memory_order_acq_rel)) {
+            accountStatus = "WAITING FOR ACCOUNT APPROVAL...";
+            notify("Stremio: link code ready in Settings / Account");
+            staticScreenKey = ~0ull;
+        }
+        if (accountJob.completed.exchange(false,
+                std::memory_order_acq_rel)) {
+            pthread_join(accountJob.thread, nullptr);
+            if (accountJob.result == 0 && !accountJob.authKey.empty()) {
+                authKey = accountJob.authKey;
+                addonCollectionJson = accountJob.addonJson;
+                addonUrls = accountJob.addonUrls;
+                char status[96];
+                snprintf(status, sizeof(status),
+                    "SYNC COMPLETE   %d ADDON ENDPOINTS",
+                    static_cast<int>(addonUrls.size()));
+                accountStatus = status;
+                notify("Stremio: account and addons synchronized");
+            } else if (accountJob.cancel.load(std::memory_order_acquire)) {
+                accountStatus = "ACCOUNT LINK CANCELLED";
+            } else {
+                char status[96];
+                snprintf(status, sizeof(status),
+                    "ACCOUNT SYNC FAILED AT STAGE %d", accountJob.result);
+                accountStatus = status;
+                notify("Stremio: account synchronization failed");
+            }
+            staticScreenKey = ~0ull;
+        }
         if (streamJob.completed.exchange(false, std::memory_order_acq_rel)) {
             pthread_join(streamJob.thread, nullptr);
             if (streamJob.result == 0) {
@@ -1804,7 +2093,7 @@ int main() {
                 catalogPosters.clear();
             }
         } else if (shellVisible && activeTab == 4) {
-            const int maximumSelection = settingsPage == 0 ? 3 :
+            const int maximumSelection = settingsPage == 0 ? 4 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
             if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && settingsSelection > 0)
@@ -1817,10 +2106,13 @@ int main() {
                 settingsSelection = 0;
             } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
                 if (settingsPage == 0 && settingsSelection == 0) {
+                    settingsPage = 4;
+                    settingsSelection = 0;
+                } else if (settingsPage == 0 && settingsSelection == 1) {
                     settingsPage = 1;
                     // Direct Videodec2 is the validated 1080p default.
                     settingsSelection = 3;
-                } else if (settingsPage == 0 && settingsSelection == 1) {
+                } else if (settingsPage == 0 && settingsSelection == 2) {
                     while ((readButtons(pad) & ORBIS_PAD_BUTTON_CROSS) != 0 &&
                         !exitRequested) sceKernelUsleep(8000);
                     if (pad >= 0) { scePadClose(pad); pad = -1; }
@@ -1836,13 +2128,15 @@ int main() {
                     }
                     pad = scePadOpen(userId, 0, 0, nullptr);
                     previousButtons = readButtons(pad);
-                } else if (settingsPage == 0 && settingsSelection == 2) {
+                } else if (settingsPage == 0 && settingsSelection == 3) {
                     searchQuery.clear();
                     searchShowingResults = false;
                     notify("Stremio: search query cleared");
-                } else if (settingsPage == 0 && settingsSelection == 3) {
+                } else if (settingsPage == 0 && settingsSelection == 4) {
                     settingsPage = 3;
                     settingsSelection = 0;
+                } else if (settingsPage == 4) {
+                    startAccountSync();
                 } else if (settingsPage == 1) {
                     playbackDecodeOnly = settingsSelection != 0;
                     playbackLegacyApi = settingsSelection == 2;
@@ -1904,21 +2198,28 @@ int main() {
                 notify("Stremio: no item in this slot");
             }
         } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
-            catalogType == "series" && !details.episodes.empty()) {
-            const MetaDetails::Episode& episode =
-                details.episodes[detailEpisodeIndex];
-            char selected[128];
-            snprintf(selected, sizeof(selected),
-                "Stremio: selected season %d episode %d",
-                episode.season, episode.episode);
-            notify(selected);
-        } else if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0 && detailVisible &&
-            !streamVisible && catalogType == "publicdomain") {
-            const int streamResult =
-                fetchPublicDomainStreams(details.id, streams);
+            !streamVisible) {
+            std::string streamType = catalogType == "series"
+                ? "series" : "movie";
+            std::string streamId = details.id;
+            if (catalogType == "series") {
+                if (details.episodes.empty()) {
+                    notify("Stremio: no episodes available");
+                    continue;
+                }
+                streamId = details.episodes[detailEpisodeIndex].id;
+            }
+            int streamResult = -9;
+            if (catalogType == "publicdomain")
+                streamResult = fetchPublicDomainStreams(streamId, streams);
+            else if (!addonUrls.empty())
+                streamResult = fetchAddonStreams(
+                    addonUrls, streamType, streamId, streams);
             if (streamResult > 0) {
                 focusedStream = 0;
                 streamVisible = true;
+            } else if (addonUrls.empty() && catalogType != "publicdomain") {
+                notify("Stremio: link account and sync addons in Settings");
             } else {
                 char failure[96];
                 snprintf(failure, sizeof(failure),
@@ -2209,10 +2510,15 @@ int main() {
                 --staticScreenFrames;
             }
         } else if (activeTab == 4) {
-            const uint64_t key = 0x5400000000000000ull |
+            uint64_t key = 0x5400000000000000ull |
                 (static_cast<uint64_t>(indicatorX) << 24) |
                 (static_cast<uint64_t>(settingsPage) << 16) |
                 static_cast<uint32_t>(settingsSelection);
+            if (settingsPage == 4) {
+                key ^= stableHash(accountStatus);
+                key ^= stableHash(accountJob.code);
+                key ^= static_cast<uint64_t>(addonUrls.size()) << 40;
+            }
             if (key != staticScreenKey) {
                 staticScreenKey = key;
                 staticScreenFrames = kFrameBuffers;
@@ -2226,6 +2532,10 @@ int main() {
                         playbackDirectVideoDec2);
                 } else if (settingsPage == 3) {
                     drawAbout(scene, indicatorX);
+                } else if (settingsPage == 4) {
+                    drawAccount(scene, indicatorX, accountJob.code,
+                        accountJob.link, accountStatus,
+                        static_cast<int>(addonUrls.size()), !authKey.empty());
                 } else {
                     drawSettings(scene, settingsSelection, indicatorX);
                 }
@@ -2270,6 +2580,11 @@ int main() {
     if (streamJob.running.load(std::memory_order_acquire) ||
         streamJob.completed.load(std::memory_order_acquire))
         pthread_join(streamJob.thread, nullptr);
+    if (accountJob.running.load(std::memory_order_acquire))
+        accountJob.cancel.store(true, std::memory_order_release);
+    if (accountJob.running.load(std::memory_order_acquire) ||
+        accountJob.completed.load(std::memory_order_acquire))
+        pthread_join(accountJob.thread, nullptr);
     if (imeDialogInitialized &&
         sceImeDialogGetStatus() == ORBIS_DIALOG_STATUS_RUNNING) {
         sceImeDialogAbort();

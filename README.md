@@ -151,7 +151,15 @@ System termination now stops AVPlayer before joining its frame worker, then
 closes the decoder, IME, controller, HTTP, SSL, network, and user services in a
 single orderly path. Native-style colored PS button badges replace the old
 text-only control legends in screen-corner footers.
-It does not log in, load user addons, or present decoded audio yet.
+Version 3.10 adds official device-link authentication under **Settings >
+Stremio Account and Synced Addons**. The PS4 shows a short
+`link.stremio.com` code, polls for approval without collecting a password,
+stores the returned account token in private app data, and synchronizes the
+account's addon collection. Movie and episode details query those endpoints
+through the standard Stremio `/stream` resource and present direct URLs and
+torrent descriptors in the native stream picker. Stremio addons remain remote
+HTTP services; the client never downloads or executes third-party addon code.
+Decoded audio is not implemented yet.
 
 Controller controls:
 
@@ -161,14 +169,15 @@ Controller controls:
 - **Up/Down** continuously scrolls catalog pages and fetches more at the end.
 - **Triangle** explicitly reloads the active catalog and its posters.
 - **Cross** opens the focused item's metadata detail screen.
-- On Series details, **Left/Right** browses episodes and **Cross** selects the
-  focused episode.
+- On Series details, **Left/Right** browses episodes and **Cross** requests
+  streams for the focused episode from synchronized addons.
 - **Circle** returns from details to the catalog.
 - **Square** runs the AVPlayer hardware-decoder probe. Success reports the
   dimensions of the first decoded frame.
 - On Search, **Cross** opens the PS4 system keyboard. Its Search button submits
   the query; **Triangle** repeats it and **Circle** clears or returns from results.
-- The Settings tab contains the packaged and cached-HTTPS playback tests.
+- The Settings tab contains account/addon synchronization, companion setup,
+  and packaged and cached-HTTPS playback tests.
 - On a Public Domain detail page, **Cross** resolves addon streams. The stream
   screen uses **Up/Down**, **Cross**, and **Circle**. Selecting a direct HTTPS
   MP4 now downloads it incrementally to the persistent cache, demuxes its AVC
@@ -186,10 +195,15 @@ Controller controls:
 | --- | --- | --- |
 | M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
 | M1 | Controller, HTTPS, and local H.264 decode proof | Validated on PS4 FW 13.02 |
-| M2 | Stremio login, catalogs, search and metadata | In progress |
+| M2 | Stremio login, addon sync, catalogs, search and metadata | Console testing |
 | M3 | Cached HTTPS MP4/AVC stream selection and Videodec2 playback | Console testing |
-| M4 | Companion Stremio server integration | Planned |
+| M4 | Companion Stremio server integration | Console testing |
 | M5 | Library, progress sync, subtitles and settings | Planned |
+
+Version 3.10 still uses the configured companion transport for torrent-backed
+addon results. Moving BitTorrent transport fully onto PS4 is a separate native
+engine milestone; account login and addon discovery do not themselves provide
+the torrent engine.
 
 Version 3.02 supports direct HTTPS MP4 files with an H.264/AVC
 video track first. WebM, MKV, HEVC, DASH/HLS manifests, a built-in torrent
