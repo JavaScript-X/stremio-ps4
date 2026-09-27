@@ -401,7 +401,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
         "PLAYBACK TESTS",
         "COMPANION SERVER  PC-IP:11470",
         "CLEAR SEARCH QUERY",
-        "ABOUT STREMIO  v3.01"};
+        "ABOUT STREMIO  v3.02"};
     drawSettingsRows(scene, rows, 4, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -955,7 +955,10 @@ int downloadUrlToFile(const char* url, const std::string& path,
     if (requestId >= 0 && sceHttpSendRequest(requestId, nullptr, 0) >= 0) {
         int status = 0;
         if (sceHttpGetStatusCode(requestId, &status) >= 0 && status == 200) {
-            char chunk[64 * 1024];
+            // OpenOrbis worker threads have a much smaller default stack than
+            // desktop pthreads. A previous 64 KiB local buffer exhausted it
+            // as soon as a torrent-backed download started on real hardware.
+            char chunk[8 * 1024];
             result = 0;
             for (;;) {
                 const int bytes = sceHttpReadData(requestId, chunk, sizeof(chunk));
@@ -1952,8 +1955,14 @@ int main() {
                     streamJob.media = {};
                     streamJob.completed.store(false, std::memory_order_release);
                     streamJob.running.store(true, std::memory_order_release);
-                    if (pthread_create(&streamJob.thread, nullptr,
-                            streamPrepareEntry, &streamJob) != 0) {
+                    pthread_attr_t streamAttributes;
+                    pthread_attr_init(&streamAttributes);
+                    pthread_attr_setstacksize(&streamAttributes, 512 * 1024);
+                    const int threadResult = pthread_create(
+                        &streamJob.thread, &streamAttributes,
+                        streamPrepareEntry, &streamJob);
+                    pthread_attr_destroy(&streamAttributes);
+                    if (threadResult != 0) {
                         streamJob.running.store(false, std::memory_order_release);
                         notify("Stremio: stream worker could not start");
                     } else {

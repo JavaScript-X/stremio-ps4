@@ -191,7 +191,7 @@ Controller controls:
 | M4 | Companion Stremio server integration | Planned |
 | M5 | Library, progress sync, subtitles and settings | Planned |
 
-Version 3.01 supports direct HTTPS MP4 files with an H.264/AVC
+Version 3.02 supports direct HTTPS MP4 files with an H.264/AVC
 video track first. WebM, MKV, HEVC, DASH/HLS manifests, a built-in torrent
 engine, audio
 playback, subtitles, and protected streams are detected as future compatibility
