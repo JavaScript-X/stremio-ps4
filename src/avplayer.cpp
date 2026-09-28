@@ -103,7 +103,7 @@ AvPlayerProbe::~AvPlayerProbe() {
 }
 
 bool AvPlayerProbe::start(
-    const char* url, bool renderPreview, bool legacyFrameApi) {
+    const char* url, bool renderPreview, bool legacyFrameApi, bool audioOnly) {
     if (decoderThreadRunning_ && !decoderThreadFinished_) {
         errorStage_ = 8;
         errorCode_ = -1;
@@ -130,6 +130,7 @@ bool AvPlayerProbe::start(
     paused_ = false;
     renderPreview_ = renderPreview;
     legacyFrameApi_ = legacyFrameApi;
+    audioOnly_ = audioOnly;
     latestPlayerEvent = 0;
 
     if (!initializeTexturePool()) {
@@ -197,18 +198,27 @@ void AvPlayerProbe::update() {
         }
 
         bool videoEnabled = false;
+        bool audioEnabled = false;
         const int32_t streamCount = sceAvPlayerStreamCount(handle_);
         int32_t lastInfoResult = 0;
         int32_t lastEnableResult = 0;
         for (int32_t index = 0; index < streamCount; ++index) {
             SceAvPlayerStreamInfo info = {};
             lastInfoResult = sceAvPlayerGetStreamInfo(handle_, index, &info);
-            if (lastInfoResult >= 0 && info.details.video.width > 0 &&
+            const bool videoStream = lastInfoResult >= 0 &&
+                info.details.video.width > 0 && info.details.video.height > 0;
+            if (videoStream && !audioOnly_ &&
                 info.details.video.height > 0) {
                 lastEnableResult = sceAvPlayerEnableStream(handle_, index);
             }
-            if (lastInfoResult >= 0 && info.details.video.width > 0 &&
-                info.details.video.height > 0 && lastEnableResult >= 0) {
+            if (!videoStream && audioOnly_ && lastInfoResult >= 0) {
+                lastEnableResult = sceAvPlayerEnableStream(handle_, index);
+                if (lastEnableResult >= 0) {
+                    audioEnabled = true;
+                    duration_ = info.duration;
+                }
+            }
+            if (videoStream && !audioOnly_ && lastEnableResult >= 0) {
                 width_ = info.details.video.width;
                 height_ = info.details.video.height;
                 duration_ = info.duration;
@@ -216,7 +226,7 @@ void AvPlayerProbe::update() {
                 break;
             }
         }
-        if (!videoEnabled) {
+        if ((!audioOnly_ && !videoEnabled) || (audioOnly_ && !audioEnabled)) {
             errorStage_ = 5;
             // Preserve the actual failing API code when available. A positive
             // value still reports the discovered stream count.
@@ -234,6 +244,11 @@ void AvPlayerProbe::update() {
         }
         started_ = true;
         state_ = State::Decoding;
+    }
+
+    if (audioOnly_) {
+        state_ = State::Passed;
+        return;
     }
 
     if (!decoderThreadRunning_) {

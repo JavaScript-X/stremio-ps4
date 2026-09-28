@@ -138,7 +138,8 @@ public:
     bool start(
         const char* url,
         bool renderPreview = true,
-        bool legacyFrameApi = false);
+        bool legacyFrameApi = false,
+        bool audioOnly = false);
     void update();
     // Return control to the shell immediately; the frame-owning worker performs
     // Sony AVPlayer Stop/Close so teardown can never block the render thread.
@@ -173,6 +174,7 @@ private:
     bool paused_ = false;
     bool renderPreview_ = true;
     bool legacyFrameApi_ = false;
+    bool audioOnly_ = false;
     std::vector<uint32_t> preview_;
     uint32_t previewWidth_ = 0;
     uint32_t previewHeight_ = 0;

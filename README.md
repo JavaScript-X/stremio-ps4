@@ -262,6 +262,12 @@ horizontal poster rail. The left navigation opens and closes with a lightweight
 width animation, background artwork loads without blocking the shell, and
 routine successful playback notifications no longer obscure the interface.
 
+Version 3.91 consumes the controller press used to close the navigation rail,
+pre-renders hero backdrops at framebuffer size for smooth menu animation, and
+falls back to MetaHub artwork and title logos when catalog summaries omit them.
+The segmented Videodec2 path now starts the companion's HLS audio rendition in
+parallel through Sony AVPlayer so supported streams provide video and audio.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

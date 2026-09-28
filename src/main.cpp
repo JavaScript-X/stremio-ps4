@@ -111,16 +111,22 @@ void drawBrand(Scene2D& scene, Color text) {
 }
 
 void drawSideNavigation(Scene2D& scene, int activeTab) {
-    const Color rail = {12, 11, 19};
-    const Color selected = {87, 61, 150};
+    const Color rail = {10, 9, 17};
+    const Color selected = {70, 48, 126};
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {135, 130, 151};
     const int railWidth = navigationWidth;
     scene.DrawRectangle(0, 0, railWidth, kHeight, rail);
+    scene.DrawVerticalFade(0, 0, railWidth, 160,
+        Color{42, 29, 74}, 190, 0);
     scene.DrawVerticalFade(railWidth - 18, 0, 18, kHeight,
         Color{65, 43, 110}, 110, 25);
-    if (railWidth > 250) drawBrand(scene, text);
+    if (railWidth > 250) {
+        drawBrand(scene, text);
+        scene.DrawText(42, 116, "WATCH  DISCOVER  ENJOY", muted, 1);
+        scene.DrawRectangle(34, 151, railWidth - 68, 2, Color{51, 46, 66});
+    }
     else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
         headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     const char* labels[] = {"Movies", "Series", "Public domain", "Search", "Settings"};
@@ -130,6 +136,7 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
         if (index == activeTab) {
             scene.DrawRoundedRectangle(22, y,
                 railWidth > 250 ? railWidth - 44 : 58, 76, 38, selected);
+            scene.DrawRoundedRectangle(24, y + 5, 6, 66, 3, purple);
         }
         scene.DrawRoundedRectangle(34, y + 10, 56, 56, 28,
             index == activeTab ? purple : Color{31, 29, 42});
@@ -144,9 +151,12 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
         }
     }
     if (railWidth > 250) {
-        scene.DrawText(55, 885, "Navigate", text, 2);
-        scene.DrawText(55, 925, "UP / DOWN   Sections", muted, 1);
-        scene.DrawText(55, 957, "RIGHT / CROSS   Open", muted, 1);
+        scene.DrawRoundedRectangle(34, 864, railWidth - 68, 150, 24,
+            Color{20, 18, 29});
+        scene.DrawText(55, 888, "NAVIGATION", purple, 1);
+        scene.DrawText(55, 925, "UP / DOWN   SECTIONS", text, 1);
+        scene.DrawText(55, 957, "RIGHT / CROSS   OPEN", text, 1);
+        scene.DrawText(55, 990, "CIRCLE   RETURN", muted, 1);
     }
 }
 
@@ -278,7 +288,8 @@ void drawHardwareProbe(
     int indicatorX,
     int animationFrame,
     int catalogMotion,
-    const PosterImage* heroArtwork) {
+    const PosterImage* heroArtwork,
+    const PosterImage* heroLogo) {
     const Color background = {11, 10, 17};
     const Color header = {24, 22, 33};
     const Color stremioPurple = {123, 91, 214};
@@ -359,9 +370,8 @@ void drawHardwareProbe(
     // outgoing cards disappear behind it instead of crossing the top menu.
     const int contentLeft = useSideNavigation ? 96 : 0;
     if (androidTvMode && heroArtwork && heroArtwork->valid()) {
-        scene.BlitRgbScaledRounded(contentLeft, 0, kWidth - contentLeft, 570, 0,
-            heroArtwork->pixels.data(), heroArtwork->width,
-            heroArtwork->height, 100);
+        scene.BlitRgbMasked(contentLeft, 0, heroArtwork->width,
+            heroArtwork->height, heroArtwork->pixels.data());
         scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 570,
             Color{8, 7, 13}, 110, 245);
         scene.DrawRectangle(contentLeft, 0, 760, 570, Color{8, 7, 13});
@@ -381,7 +391,10 @@ void drawHardwareProbe(
     std::string featured = selectedIndex < static_cast<int>(items.size())
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
-    scene.DrawText(150, 90, featured.c_str(), text, 5);
+    if (androidTvMode && heroLogo && heroLogo->valid())
+        scene.BlitRgbMasked(150, 78, heroLogo->width, heroLogo->height,
+            heroLogo->pixels.data());
+    else scene.DrawText(150, 90, featured.c_str(), text, 5);
     if (androidTvMode && selectedIndex < static_cast<int>(items.size())) {
         const CatalogItem& selectedItem = items[selectedIndex];
         std::string facts;
@@ -528,7 +541,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v3.90"};
+        "ABOUT STREMIO  v3.91"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -1829,7 +1842,9 @@ struct HeroArtworkJob {
     std::atomic<bool> completed{false};
     std::string itemId;
     std::string url;
+    std::string logoUrl;
     PosterImage artwork;
+    PosterImage logo;
     int result = 0;
 };
 
@@ -1842,9 +1857,44 @@ void* heroArtworkEntry(void* argument) {
     const bool cached = readCachedFile(stored, kMaximumPosterBytes, encoded);
     const int bytes = cached ? static_cast<int>(encoded.size()) :
         downloadUrl(url.c_str(), kMaximumPosterBytes, encoded);
+    PosterImage decoded;
     job->result = bytes > 0 &&
-        decodePosterJpeg(encoded, 1180, 570, job->artwork) ? 1 : -1;
+        decodePosterJpeg(encoded, 1920, 1080, decoded) ? 1 : -1;
     if (job->result > 0 && !cached) writeCachedFile(stored, encoded);
+    if (job->result > 0) {
+        constexpr int targetWidth = kWidth - 96;
+        constexpr int targetHeight = 570;
+        job->artwork.width = targetWidth;
+        job->artwork.height = targetHeight;
+        job->artwork.pixels.resize(
+            static_cast<size_t>(targetWidth) * targetHeight);
+        const float scale = std::max(
+            static_cast<float>(targetWidth) / decoded.width,
+            static_cast<float>(targetHeight) / decoded.height);
+        const int sourceWidth = static_cast<int>(targetWidth / scale);
+        const int sourceHeight = static_cast<int>(targetHeight / scale);
+        const int sourceX = (decoded.width - sourceWidth) / 2;
+        const int sourceY = (decoded.height - sourceHeight) / 2;
+        for (int y = 0; y < targetHeight; ++y) {
+            const int sy = sourceY + y * sourceHeight / targetHeight;
+            for (int x = 0; x < targetWidth; ++x) {
+                const int sx = sourceX + x * sourceWidth / targetWidth;
+                job->artwork.pixels[static_cast<size_t>(y) * targetWidth + x] =
+                    decoded.pixels[static_cast<size_t>(sy) * decoded.width + sx];
+            }
+        }
+    }
+    if (job->logoUrl.compare(0, 8, "https://") == 0) {
+        std::string logoEncoded;
+        const std::string logoStored = cachePath("logo", job->logoUrl, "png");
+        const bool logoCached = readCachedFile(
+            logoStored, kMaximumPosterBytes, logoEncoded);
+        const int logoBytes = logoCached ? static_cast<int>(logoEncoded.size()) :
+            downloadUrl(job->logoUrl.c_str(), kMaximumPosterBytes, logoEncoded);
+        if (logoBytes > 0 && decodePosterJpeg(
+                logoEncoded, 520, 150, job->logo) && !logoCached)
+            writeCachedFile(logoStored, logoEncoded);
+    }
     job->completed.store(true, std::memory_order_release);
     job->running.store(false, std::memory_order_release);
     return nullptr;
@@ -2086,6 +2136,8 @@ int main() {
     int focusedCard = 0;
     uint32_t previousButtons = 0;
     AvPlayerProbe avPlayer;
+    AvPlayerProbe streamAudioPlayer;
+    bool streamAudioFailureReported = false;
     VideoDec2Probe videoDec2;
     AvPlayerProbe::State previousPlayerState = AvPlayerProbe::State::Idle;
     int avPlayerProbeFrames = 0;
@@ -2170,6 +2222,7 @@ int main() {
     StreamLookupJob streamLookupJob;
     HeroArtworkJob heroJob;
     PosterImage heroArtwork;
+    PosterImage heroLogo;
     std::string heroArtworkId;
     std::string heroRequestedId;
     catalogJobs[0].type = "movie";
@@ -2422,7 +2475,7 @@ int main() {
         drawHardwareProbe(
             scene, focusedCard, catalogPage, catalogType, catalogStatus,
             catalogItems, catalogPosters, activeTab, indicatorX,
-            animationFrame, catalogMotion, nullptr);
+            animationFrame, catalogMotion, nullptr, nullptr);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
@@ -2431,10 +2484,22 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        streamAudioPlayer.update();
+        if (streamAudioPlayer.state() == AvPlayerProbe::State::Failed &&
+            !streamAudioFailureReported) {
+            char failure[112];
+            snprintf(failure, sizeof(failure),
+                "Stremio: stream audio unavailable, stage %d code 0x%08x",
+                streamAudioPlayer.errorStage(),
+                static_cast<unsigned int>(streamAudioPlayer.errorCode()));
+            notify(failure);
+            streamAudioFailureReported = true;
+        }
         if (heroJob.completed.exchange(false, std::memory_order_acq_rel)) {
             pthread_join(heroJob.thread, nullptr);
             if (heroJob.result > 0) {
                 heroArtwork = std::move(heroJob.artwork);
+                heroLogo = std::move(heroJob.logo);
                 heroArtworkId = heroJob.itemId;
             }
             staticScreenKey = ~0ull;
@@ -2464,6 +2529,13 @@ int main() {
                 const VideoDec2Probe::State state = videoDec2.state();
                 if (state == VideoDec2Probe::State::Idle ||
                     state == VideoDec2Probe::State::Finished) {
+                    if (streamAudioPlayer.state() == AvPlayerProbe::State::Idle) {
+                        streamAudioFailureReported = false;
+                        const std::string audioPlaylist = hlsJob.baseUrl +
+                            "audio0.m3u8";
+                        streamAudioPlayer.start(
+                            audioPlaylist.c_str(), false, false, true);
+                    }
                     videoDec2.start(hlsJob.outputPath.c_str());
                     hlsJob.segmentWaiting = false;
                     startNextHlsSegment();
@@ -2486,6 +2558,7 @@ int main() {
                     notify(failure);
                 }
                 hlsJob.active = false;
+                streamAudioPlayer.stop();
             }
         }
         if (hlsJob.active && hlsJob.segmentWaiting &&
@@ -2498,6 +2571,7 @@ int main() {
             videoDec2.state() == VideoDec2Probe::State::Failed) {
             hlsJob.active = false;
             hlsJob.segmentWaiting = false;
+            streamAudioPlayer.stop();
         }
         if (accountJob.codeReady.exchange(false,
                 std::memory_order_acq_rel)) {
@@ -2628,6 +2702,7 @@ int main() {
                 hlsJob.active = false;
                 hlsJob.segmentWaiting = false;
                 videoDec2.stop();
+                streamAudioPlayer.stop();
             } else if (videoDec2.state() != VideoDec2Probe::State::Idle) {
                 videoDec2.stop();
             } else if (previewVisible ||
@@ -2642,10 +2717,14 @@ int main() {
         }
 
         if (videoDec2.state() != VideoDec2Probe::State::Idle) {
-            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0)
+            if ((pressed & ORBIS_PAD_BUTTON_CROSS) != 0) {
                 videoDec2.togglePause();
-            if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
+                if (hlsJob.active) streamAudioPlayer.togglePause();
+            }
+            if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
                 videoDec2.restart();
+                if (hlsJob.active) streamAudioPlayer.restart();
+            }
         }
 
         const bool shellVisible =
@@ -2658,13 +2737,23 @@ int main() {
                 selectedIndex < static_cast<int>(catalogItems.size())) {
                 const CatalogItem& selected = catalogItems[selectedIndex];
                 if (selected.id != heroRequestedId &&
-                    selected.background.compare(0, 8, "https://") == 0 &&
                     !heroJob.running.load(std::memory_order_acquire)) {
                     heroRequestedId = selected.id;
                     heroJob.itemId = selected.id;
-                    heroJob.url = selected.background;
+                    heroJob.url = selected.background.compare(0, 8, "https://") == 0
+                        ? selected.background
+                        : (selected.id.compare(0, 2, "tt") == 0
+                            ? "https://images.metahub.space/background/medium/" +
+                                selected.id + "/img"
+                            : selected.poster);
+                    heroJob.logoUrl = selected.logo.compare(0, 8, "https://") == 0
+                        ? selected.logo
+                        : (selected.id.compare(0, 2, "tt") == 0
+                            ? "https://images.metahub.space/logo/medium/" +
+                                selected.id + "/img" : "");
                     heroJob.result = 0;
                     heroJob.artwork = {};
+                    heroJob.logo = {};
                     heroJob.running.store(true, std::memory_order_release);
                     heroJob.completed.store(false, std::memory_order_release);
                     if (pthread_create(&heroJob.thread, nullptr,
@@ -2685,6 +2774,7 @@ int main() {
             selectTab(activeTab - 1);
         }
 
+        bool navigationInputConsumed = false;
         if (shellVisible && useSideNavigation) {
             const bool canEnterRail = catalogScreen ? focusedCard == 0 : true;
             if (!navigationFocused && canEnterRail &&
@@ -2699,6 +2789,7 @@ int main() {
                 if ((pressed & (ORBIS_PAD_BUTTON_RIGHT |
                         ORBIS_PAD_BUTTON_CROSS)) != 0) {
                     navigationFocused = false;
+                    navigationInputConsumed = true;
                     staticScreenKey = ~0ull;
                 }
             }
@@ -2716,7 +2807,7 @@ int main() {
             }
         }
 
-        if (shellVisible && !navigationFocused && activeTab == 3 &&
+        if (shellVisible && !navigationFocused && !navigationInputConsumed && activeTab == 3 &&
             !searchShowingResults) {
             if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0)
                 searchFilter = (searchFilter + 2) % 3;
@@ -2743,7 +2834,7 @@ int main() {
             if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) searchQuery.clear();
             if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
                 loadSearchResults();
-        } else if (shellVisible && !navigationFocused && catalogScreen) {
+        } else if (shellVisible && !navigationFocused && !navigationInputConsumed && catalogScreen) {
             if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
                 --focusedCard;
             if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
@@ -2789,7 +2880,7 @@ int main() {
                 catalogItems.clear();
                 catalogPosters.clear();
             }
-        } else if (shellVisible && !navigationFocused && activeTab == 4) {
+        } else if (shellVisible && !navigationFocused && !navigationInputConsumed && activeTab == 4) {
             const int maximumSelection = settingsPage == 0 ? 7 :
                 (settingsPage == 1 ? 3 : (settingsPage == 2 ?
                     (playbackDirectVideoDec2 ? 0 : 5) : 0));
@@ -3145,6 +3236,7 @@ int main() {
             hlsJob.active = false;
             hlsJob.segmentWaiting = false;
             videoDec2.stop();
+            streamAudioPlayer.stop();
             notify("Stremio: segmented Videodec2 stream stopped");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             streamJob.running.load(std::memory_order_acquire)) {
@@ -3386,10 +3478,12 @@ int main() {
                     selectedIndex >= 0 && selectedIndex < static_cast<int>(catalogItems.size()) &&
                     catalogItems[selectedIndex].id == heroArtworkId && heroArtwork.valid()
                     ? &heroArtwork : nullptr;
+                const PosterImage* activeLogo = activeHero && heroLogo.valid()
+                    ? &heroLogo : nullptr;
                 drawHardwareProbe(
                     scene, focusedCard, catalogPage, catalogType, catalogStatus,
                     catalogItems, catalogPosters, activeTab, indicatorX,
-                    animationFrame, catalogMotion, activeHero);
+                    animationFrame, catalogMotion, activeHero, activeLogo);
                 --staticScreenFrames;
             }
         }
@@ -3417,6 +3511,7 @@ int main() {
 
     DEBUGLOG << "Stremio graceful shutdown starting";
     avPlayer.stop();
+    streamAudioPlayer.stop();
     videoDec2.stop();
     for (int index = 0; index < 3; ++index) {
         CatalogLoadJob& job = catalogJobs[index];
