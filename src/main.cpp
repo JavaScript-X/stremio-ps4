@@ -428,10 +428,11 @@ void drawHardwareProbe(
         scene.BlitRgbMasked(contentLeft, 0, heroArtwork->width,
             heroArtwork->height, heroArtwork->pixels.data());
         scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 570,
-            Color{8, 7, 13}, 110, 245);
-        scene.DrawRectangle(contentLeft, 0, 760, 570, Color{8, 7, 13});
-        scene.DrawVerticalFade(contentLeft + 700, 0, 300, 570,
-            Color{8, 7, 13}, 245, 0);
+            Color{8, 7, 13}, 28, 145);
+        scene.DrawVerticalFade(contentLeft, 0, 860, 570,
+            Color{8, 7, 13}, 218, 180);
+        scene.DrawVerticalFade(contentLeft + 650, 0, 420, 570,
+            Color{8, 7, 13}, 170, 0);
     } else {
         scene.DrawRectangle(contentLeft, 0, kWidth - contentLeft, 240, background);
         scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 210,
@@ -492,10 +493,9 @@ void drawHardwareProbe(
     scene.DrawText(1550, 56, pageText, mutedText, 2);
     scene.DrawText(150, androidTvMode ? 535 : 215,
         "Recommended for you", text, 3);
-    scene.DrawText(150, androidTvMode ? 975 : 740,
+    scene.DrawText(150, androidTvMode ? 946 : 740,
         status.c_str(), mutedText, 2);
-    scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
-    drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
+    scene.DrawVerticalFade(250, 970, kWidth - 250, 110, header, 0, 230);
     drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
     drawStickHint(scene, 300, 1015, "NAVIGATE");
     drawNavigation(scene, activeTab);
@@ -509,14 +509,15 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
-    scene.DrawText(300, 55, "DISCOVER", muted, 2);
-    scene.DrawText(300, 100, "SEARCH", text, 5);
-    scene.DrawText(300, 175,
+    const int contentX = useSideNavigation ? std::max(300, navigationWidth + 45) : 300;
+    scene.DrawVerticalFade(contentX - 50, 0, kWidth - contentX + 50, 210, header, 220, 0);
+    scene.DrawText(contentX, 55, "DISCOVER", muted, 2);
+    scene.DrawText(contentX, 100, "SEARCH", text, 5);
+    scene.DrawText(contentX, 175,
         "SEARCH MOVIES, SERIES, OR THE PUBLIC DOMAIN COLLECTION", muted, 2);
     const char* filters[] = {"MOVIES", "SERIES", "PUBLIC DOMAIN"};
     const int filterWidths[] = {250, 250, 360};
-    int filterX = 300;
+    int filterX = contentX;
     for (int index = 0; index < 3; ++index) {
         scene.DrawRoundedRectangle(filterX, 225, filterWidths[index], 62, 20,
             index == filter ? purple : header);
@@ -524,22 +525,24 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
             index == filter ? text : muted, 2);
         filterX += filterWidths[index] + 24;
     }
-    scene.DrawRoundedRectangle(300, 325, 1500, 130, 30, header);
-    scene.DrawRoundedRectangle(335, 355, 68, 68, 20, purple);
-    scene.DrawText(356, 369, "?", text, 4);
-    scene.DrawText(435, 347, "TITLE", muted, 2);
+    scene.DrawRoundedRectangle(contentX, 325, 1800 - contentX, 130, 30, header);
+    scene.DrawRoundedRectangle(contentX + 35, 355, 68, 68, 20, purple);
+    scene.DrawText(contentX + 56, 369, "?", text, 4);
+    scene.DrawText(contentX + 135, 347, "TITLE", muted, 2);
     const std::string shown = query.empty() ? "TYPE A TITLE..." : query + "_";
-    scene.DrawText(435, 392, shown.c_str(), query.empty() ? muted : text, 3);
-    scene.DrawRoundedRectangle(300, 505, 720, 250, 26, header);
-    scene.DrawText(345, 550, "PS4 SYSTEM KEYBOARD", text, 3);
-    scene.DrawText(345, 610, "CROSS   TYPE / SELECT", muted, 2);
-    scene.DrawText(345, 650, "SQUARE  DELETE    TRIANGLE  SPACE", muted, 2);
-    scene.DrawText(345, 690, "R2      SEARCH    CIRCLE    CLOSE", muted, 2);
-    scene.DrawRoundedRectangle(1060, 505, 740, 250, 26, header);
-    scene.DrawText(1105, 550, "SEARCH TIPS", text, 3);
-    scene.DrawText(1105, 610, "LEFT / RIGHT CHANGES THE FILTER", muted, 2);
-    scene.DrawText(1105, 650, "UP TO 24 RESULTS WITH CACHED POSTERS", muted, 2);
-    scene.DrawText(1105, 690, "OPEN RESULTS FOR DETAILS AND STREAMS", muted, 2);
+    scene.DrawText(contentX + 135, 392, shown.c_str(), query.empty() ? muted : text, 3);
+    const int panelWidth = (1760 - contentX - 28) / 2;
+    scene.DrawRoundedRectangle(contentX, 505, panelWidth, 250, 26, header);
+    scene.DrawText(contentX + 45, 550, "PS4 SYSTEM KEYBOARD", text, 3);
+    scene.DrawText(contentX + 45, 610, "CROSS   TYPE / SELECT", muted, 2);
+    scene.DrawText(contentX + 45, 650, "SQUARE  DELETE    TRIANGLE  SPACE", muted, 2);
+    scene.DrawText(contentX + 45, 690, "R2      SEARCH    CIRCLE    CLOSE", muted, 2);
+    const int tipsX = contentX + panelWidth + 28;
+    scene.DrawRoundedRectangle(tipsX, 505, panelWidth, 250, 26, header);
+    scene.DrawText(tipsX + 45, 550, "SEARCH TIPS", text, 3);
+    scene.DrawText(tipsX + 45, 610, "LEFT / RIGHT CHANGES THE FILTER", muted, 2);
+    scene.DrawText(tipsX + 45, 650, "UP TO 24 RESULTS WITH CACHED POSTERS", muted, 2);
+    scene.DrawText(tipsX + 45, 690, "OPEN RESULTS FOR DETAILS AND STREAMS", muted, 2);
     scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
     drawButtonHint(scene, 900, 1020, '<', "FILTER");
     drawButtonHint(scene, 1080, 1020, '>', "FILTER");
@@ -557,9 +560,10 @@ void drawSettingsHeader(Scene2D& scene, int indicatorX, const char* title) {
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
-    scene.DrawText(300, 55, "STREMIO", muted, 2);
-    scene.DrawText(300, 105, title, text, 5);
+    const int contentX = useSideNavigation ? std::max(300, navigationWidth + 45) : 300;
+    scene.DrawVerticalFade(contentX - 50, 0, kWidth - contentX + 50, 210, header, 220, 0);
+    scene.DrawText(contentX, 55, "STREMIO", muted, 2);
+    scene.DrawText(contentX, 105, title, text, 5);
 }
 
 void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
@@ -568,18 +572,19 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
     const Color focus = {82, 58, 142};
     const Color text = {235, 232, 244};
     drawSettingsHeader(scene, indicatorX, title);
-    scene.DrawRoundedRectangle(380, 235, 1360, 675, 32, header);
+    const int contentX = useSideNavigation ? std::max(380, navigationWidth + 45) : 380;
+    scene.DrawRoundedRectangle(contentX, 235, 1760 - contentX, 675, 32, header);
     for (int index = 0; index < rowCount; ++index) {
         const int y = 250 + index * 78;
         const bool focused = index == selected;
-        scene.DrawRoundedRectangle(415, y, 1290, 60, 30,
+        scene.DrawRoundedRectangle(contentX + 35, y, 1690 - contentX, 60, 30,
             focused ? focus : Color{35, 35, 46});
-        scene.DrawRoundedRectangle(435, y + 6, 48, 48, 24,
+        scene.DrawRoundedRectangle(contentX + 55, y + 6, 48, 48, 24,
             focused ? Color{123, 91, 214} : Color{52, 52, 68});
         char number[8];
         snprintf(number, sizeof(number), "%02d", index + 1);
-        scene.DrawText(443, y + 17, number, text, 2);
-        scene.DrawText(515, y + 17, rows[index], text, 2);
+        scene.DrawText(contentX + 63, y + 17, number, text, 2);
+        scene.DrawText(contentX + 135, y + 17, rows[index], text, 2);
         if (focused) {
             scene.DrawText(1640, y + 17, ">", text, 2);
         }
@@ -602,7 +607,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v4.01"};
+        "ABOUT STREMIO  v4.02"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -726,41 +731,41 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
         scene.DrawRoundedRectangle(505, 555, 1035, 90, 22, background);
         scene.DrawText(545, 585, metrics, text, 2);
     } else if (hudVisible) {
-        scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 230, 0);
-        scene.DrawText(70, 55, "NOW PLAYING", purple, 1);
+        scene.DrawVerticalFade(0, 0, kWidth, 158, panel, 232, 0);
+        scene.DrawText(64, 28, "NOW PLAYING", purple, 1);
         const std::string displayTitle = title.empty() ? "STREMIO STREAM" :
             (title.size() > 48 ? title.substr(0, 45) + "..." : title);
-        scene.DrawText(70, 92, displayTitle.c_str(), text, 3);
-        scene.DrawRoundedRectangle(70, 148, 240, 42, 21, panel);
-        scene.DrawText(96, 160, "VIDEODEC2  H.264", muted, 1);
-        scene.DrawRoundedRectangle(326, 148, 210, 42, 21,
+        scene.DrawText(64, 61, displayTitle.c_str(), text, 3);
+        scene.DrawRoundedRectangle(64, 108, 220, 36, 18, panel);
+        scene.DrawText(86, 118, "VIDEODEC2  H.264", muted, 1);
+        scene.DrawRoundedRectangle(300, 108, 190, 36, 18,
             audioActive ? Color{45, 94, 72} : Color{92, 45, 55});
-        scene.DrawText(350, 160,
+        scene.DrawText(322, 118,
             audioActive ? "AUDIO  ACTIVE" : "AUDIO  OFF", text, 1);
-        scene.DrawRoundedRectangle(560, 148, 210, 42, 21, panel);
-        scene.DrawText(590, 160,
+        scene.DrawRoundedRectangle(506, 108, 190, 36, 18, panel);
+        scene.DrawText(532, 118,
             aspectMode == 0 ? "ASPECT  FIT" : "ASPECT  FILL", muted, 1);
-        scene.DrawRoundedRectangle(370, 835, 1180, 72, 24, panel);
-        scene.DrawText(420, 861, metrics, text, 2);
+        scene.DrawRoundedRectangle(410, 892, 1100, 52, 22, Color{24, 22, 34});
+        scene.DrawText(452, 908, metrics, text, 2);
         const uint64_t duration = decoder.duration();
         const int progress = duration ? static_cast<int>(
             std::min<uint64_t>(1000, decoder.currentTime() * 1000 / duration)) : 0;
-        scene.DrawRoundedRectangle(180, 940, 1560, 14, 7, panel);
-        scene.DrawRoundedRectangle(180, 940, progress * 1560 / 1000,
-            14, 7, purple);
+        scene.DrawRoundedRectangle(180, 965, 1560, 10, 5, panel);
+        scene.DrawRoundedRectangle(180, 965, progress * 1560 / 1000,
+            10, 5, purple);
         char sync[64];
         snprintf(sync, sizeof(sync), "AUDIO SYNC  %+d MS", audioOffsetMs);
-        scene.DrawText(1500, 902, sync, muted, 1);
+        scene.DrawText(1510, 918, sync, muted, 1);
     }
     if (hudVisible || pixels.empty()) {
-        scene.DrawVerticalFade(0, 970, kWidth, 110, panel, 0, 235);
-        drawButtonHint(scene, 40, 1020, 'X',
+        scene.DrawVerticalFade(0, 980, kWidth, 100, panel, 0, 235);
+        drawButtonHint(scene, 40, 1025, 'X',
             decoder.paused() ? "RESUME" : "PAUSE");
-        drawButtonHint(scene, 285, 1020, 'T', "RESTART");
-        drawButtonHint(scene, 520, 1020, 'S', "HIDE HUD");
-        scene.DrawText(790, 1035, "UP  ASPECT    L1 / R1  AUDIO SYNC",
+        drawButtonHint(scene, 285, 1025, 'T', "RESTART");
+        drawButtonHint(scene, 520, 1025, 'S', "HIDE HUD");
+        scene.DrawText(790, 1040, "UP  ASPECT    L1 / R1  AUDIO SYNC",
             muted, 1);
-        drawButtonHint(scene, 1640, 1020, 'O', "STOP");
+        drawButtonHint(scene, 1640, 1025, 'O', "STOP");
     }
 }
 
@@ -2029,10 +2034,28 @@ struct HlsSegmentJob {
     int readySegment = -1;
     uint32_t samples = 0;
     std::string baseUrl;
+    std::string videoPlaylistUrl;
+    std::string audioPlaylistUrl;
     std::string outputPath;
     std::vector<std::string> segmentUrls;
     Fmp4VideoConfig config;
 };
+
+std::string hlsAbsoluteUrl(const std::string& baseUrl,
+    const std::string& relative) {
+    if (relative.compare(0, 8, "https://") == 0 ||
+        relative.compare(0, 7, "http://") == 0) return relative;
+    return baseUrl + relative;
+}
+
+std::string hlsQuotedUri(const std::string& line) {
+    const size_t marker = line.find("URI=\"");
+    if (marker == std::string::npos) return {};
+    const size_t first = marker + 5;
+    const size_t last = line.find('"', first);
+    return last == std::string::npos ? std::string() :
+        line.substr(first, last - first);
+}
 
 struct StreamLookupJob {
     pthread_t thread = {};
@@ -2215,12 +2238,42 @@ void* hlsSegmentEntry(void* argument) {
     HlsSegmentJob* job = static_cast<HlsSegmentJob*>(argument);
     job->result = 0;
     if (job->segmentUrls.empty()) {
+        // Resolve the exact rendition URLs once. The companion carries the
+        // torrent/session token in each URI; dropping that query makes Sony
+        // AVPlayer reject the audio source at AddSource (0x806a0002).
+        std::string master;
+        if (downloadUrl((job->baseUrl + "master.m3u8").c_str(),
+                1024 * 1024, master) > 0) {
+            size_t position = 0;
+            bool audioSeen = false;
+            while (position < master.size()) {
+                size_t end = master.find('\n', position);
+                if (end == std::string::npos) end = master.size();
+                std::string line = master.substr(position, end - position);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                if (line.find("#EXT-X-MEDIA:TYPE=AUDIO") == 0) {
+                    const std::string uri = hlsQuotedUri(line);
+                    if (!uri.empty()) {
+                        job->audioPlaylistUrl = hlsAbsoluteUrl(job->baseUrl, uri);
+                        audioSeen = true;
+                    }
+                } else if (!line.empty() && line[0] != '#' &&
+                    line.find(".m3u8") != std::string::npos &&
+                    job->videoPlaylistUrl.empty()) {
+                    job->videoPlaylistUrl = hlsAbsoluteUrl(job->baseUrl, line);
+                }
+                position = end + 1;
+            }
+            (void)audioSeen;
+        }
+        if (job->videoPlaylistUrl.empty())
+            job->videoPlaylistUrl = job->baseUrl + "video0.m3u8";
         std::string playlist;
         int playlistResult = -1;
         for (int attempt = 0; attempt < 6 && job->active; ++attempt) {
             playlist.clear();
             playlistResult = downloadUrl(
-                (job->baseUrl + "video0.m3u8").c_str(), 1024 * 1024,
+                job->videoPlaylistUrl.c_str(), 1024 * 1024,
                 playlist);
             if (playlistResult > 0) break;
             sceKernelUsleep(2000000);
@@ -2236,12 +2289,20 @@ void* hlsSegmentEntry(void* argument) {
                 if (!line.empty() && line.back() == '\r') line.pop_back();
                 if (!line.empty() && line[0] != '#' &&
                     line.find("segment") != std::string::npos)
-                    job->segmentUrls.push_back(job->baseUrl + line);
+                    job->segmentUrls.push_back(hlsAbsoluteUrl(job->baseUrl, line));
                 position = end + 1;
             }
             std::string init;
+            std::string initUrl = job->baseUrl + "video0/init.mp4";
+            const size_t mapAt = playlist.find("#EXT-X-MAP:");
+            if (mapAt != std::string::npos) {
+                const size_t mapEnd = playlist.find('\n', mapAt);
+                const std::string uri = hlsQuotedUri(playlist.substr(mapAt,
+                    mapEnd == std::string::npos ? std::string::npos : mapEnd - mapAt));
+                if (!uri.empty()) initUrl = hlsAbsoluteUrl(job->baseUrl, uri);
+            }
             if (job->segmentUrls.empty() ||
-                downloadUrl((job->baseUrl + "video0/init.mp4").c_str(),
+                downloadUrl(initUrl.c_str(),
                     1024 * 1024, init) <= 0 ||
                 !parseFmp4VideoConfig(init, job->config)) job->result = 12;
         }
@@ -2520,6 +2581,8 @@ int main() {
         hlsJob.running.store(false, std::memory_order_release);
         hlsJob.completed.store(false, std::memory_order_release);
         hlsJob.segmentUrls.clear();
+        hlsJob.videoPlaylistUrl.clear();
+        hlsJob.audioPlaylistUrl.clear();
         hlsJob.nextSegment = 0;
         hlsJob.readySegment = -1;
         videoDec2.stop();
@@ -2774,13 +2837,9 @@ int main() {
                     state == VideoDec2Probe::State::Finished) {
                     if (streamAudioPlayer.state() == AvPlayerProbe::State::Idle) {
                         streamAudioFailureReported = false;
-                        // The companion puts required rendition query data in
-                        // master.m3u8. A bare audio0.m3u8 is rejected by Sony
-                        // AVPlayer at AddSource (stage 4 / 0x806a0002).
-                        const std::string audioPlaylist = hlsJob.baseUrl +
-                            "master.m3u8";
-                        streamAudioPlayer.start(
-                            audioPlaylist.c_str(), false, false, true);
+                        if (!hlsJob.audioPlaylistUrl.empty())
+                            streamAudioPlayer.start(
+                                hlsJob.audioPlaylistUrl.c_str(), false, false, true);
                     }
                     videoDec2.start(hlsJob.outputPath.c_str());
                     playerUiRedrawFrames = kFrameBuffers;
@@ -3378,6 +3437,8 @@ int main() {
                     hlsJob.nextSegment = 0;
                     hlsJob.readySegment = -1;
                     hlsJob.segmentUrls.clear();
+                    hlsJob.videoPlaylistUrl.clear();
+                    hlsJob.audioPlaylistUrl.clear();
                     hlsJob.config = {};
                     char hlsBase[256];
                     snprintf(hlsBase, sizeof(hlsBase),
@@ -3477,10 +3538,10 @@ int main() {
             }
             queuedPlaybackTest = -1;
         }
+        // Direct test playback is settings-only. Square belongs exclusively
+        // to the active player's HUD and must never leak into shell shortcuts.
         const bool directPlaybackRequested = playbackDirectVideoDec2 &&
-            (queuedPlaybackTest == 0 ||
-             ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0 && catalogScreen &&
-              !streamVisible));
+            queuedPlaybackTest == 0;
         if (directPlaybackRequested) {
             stopBackgroundForPlayback();
             avPlayer.stop();
@@ -3609,6 +3670,8 @@ int main() {
             const bool newFrame = videoDec2.copyPreview(directPreviewPixels,
                 directPreviewWidth, directPreviewHeight);
             if (newFrame)
+                // Keep both alternating display buffers synchronized. The
+                // scaler itself is optimized to avoid per-pixel divisions.
                 playerUiRedrawFrames = std::max(
                     playerUiRedrawFrames, kFrameBuffers);
             if (playerUiRedrawFrames > 0) {

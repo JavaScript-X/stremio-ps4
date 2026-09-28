@@ -16,7 +16,7 @@
 
 ## Project status
 
-Version **4.01** is under active development and has been tested on a real PS4
+Version **4.02** is under active development and has been tested on a real PS4
 running firmware **13.02 with GoldHEN**. It is not a finished consumer release.
 Back up important console data and expect compatibility differences between
 firmware, payload, media container, codec, and addon combinations.

@@ -177,10 +177,11 @@ void Scene2D::DrawVerticalFade(
     const int top = std::max(0, y);
     const int bottom = std::min(height_, y + height);
     if (left >= right || top >= bottom) return;
-    // Twelve pre-blended bands preserve the feathered appearance without
-    // doing several integer multiplies for ~630,000 pixels every frame.
+    // Blend against the pixels already on screen. The previous shortcut
+    // blended against a fixed dark color, which made artwork disappear and
+    // turned every supposedly translucent surface into an opaque blue slab.
     constexpr int kBands = 12;
-    constexpr Color base = {18, 18, 24};
+    uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
     for (int band = 0; band < kBands; ++band) {
         const int bandTop = y + height * band / kBands;
         const int bandBottom = y + height * (band + 1) / kBands;
@@ -188,12 +189,22 @@ void Scene2D::DrawVerticalFade(
             (static_cast<int>(bottomOpacity) - topOpacity) * band /
                 (kBands - 1);
         const uint32_t inverse = 255 - opacity;
-        const Color blended = {
-            static_cast<uint8_t>((color.r * opacity + base.r * inverse) / 255),
-            static_cast<uint8_t>((color.g * opacity + base.g * inverse) / 255),
-            static_cast<uint8_t>((color.b * opacity + base.b * inverse) / 255)};
-        DrawRectangle(left, std::max(top, bandTop), right - left,
-            std::min(bottom, bandBottom) - std::max(top, bandTop), blended);
+        const int clippedTop = std::max(top, bandTop);
+        const int clippedBottom = std::min(bottom, bandBottom);
+        for (int row = clippedTop; row < clippedBottom; ++row) {
+            uint32_t* destination = buffer + static_cast<size_t>(row) * width_;
+            for (int column = left; column < right; ++column) {
+                const uint32_t dst = destination[column];
+                const uint32_t red = (color.r * opacity +
+                    ((dst >> 16) & 255) * inverse) / 255;
+                const uint32_t green = (color.g * opacity +
+                    ((dst >> 8) & 255) * inverse) / 255;
+                const uint32_t blue = (color.b * opacity +
+                    (dst & 255) * inverse) / 255;
+                destination[column] = 0x80000000u |
+                    (red << 16) | (green << 8) | blue;
+            }
+        }
     }
 }
 
@@ -240,6 +251,14 @@ void Scene2D::BlitRgbScaled(int x, int y, int width, int height,
     const int top = std::max(0, y);
     const int right = std::min(width_, x + width);
     const int bottom = std::min(height_, y + height);
+    if (left >= right || top >= bottom) return;
+    // Mapping X with a division inside the inner 1080p loop used to execute
+    // roughly two million integer divisions per blit. Cache the 1-D map;
+    // the player draws into two buffers, so this is a major frame-time win.
+    std::vector<int> sourceColumns(static_cast<size_t>(right - left));
+    for (int destinationX = left; destinationX < right; ++destinationX)
+        sourceColumns[static_cast<size_t>(destinationX - left)] =
+            (destinationX - x) * sourceWidth / width;
     uint32_t* buffer = reinterpret_cast<uint32_t*>(
         frameBuffers_[activeFrameBuffer_]);
     for (int destinationY = top; destinationY < bottom; ++destinationY) {
@@ -249,7 +268,8 @@ void Scene2D::BlitRgbScaled(int x, int y, int width, int height,
         const uint32_t* source = pixels +
             static_cast<size_t>(sourceY) * sourceWidth;
         for (int destinationX = left; destinationX < right; ++destinationX) {
-            const int sourceX = (destinationX - x) * sourceWidth / width;
+            const int sourceX = sourceColumns[
+                static_cast<size_t>(destinationX - left)];
             destination[destinationX] = 0x80000000u | source[sourceX];
         }
     }
