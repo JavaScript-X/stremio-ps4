@@ -38,10 +38,13 @@ bool decodePosterJpeg(
     poster.width = outputWidth;
     poster.height = outputHeight;
     poster.pixels.resize(static_cast<size_t>(outputWidth) * outputHeight);
+    std::vector<int> sourceColumns(static_cast<size_t>(outputWidth));
+    for (int x = 0; x < outputWidth; ++x)
+        sourceColumns[static_cast<size_t>(x)] = x * sourceWidth / outputWidth;
     for (int y = 0; y < outputHeight; ++y) {
         const int sourceY = y * sourceHeight / outputHeight;
         for (int x = 0; x < outputWidth; ++x) {
-            const int sourceX = x * sourceWidth / outputWidth;
+            const int sourceX = sourceColumns[static_cast<size_t>(x)];
             const stbi_uc* pixel = decoded +
                 (static_cast<size_t>(sourceY) * sourceWidth + sourceX) * 4;
             const uint32_t alpha = pixel[3];

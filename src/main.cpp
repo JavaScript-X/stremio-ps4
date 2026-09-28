@@ -96,7 +96,9 @@ bool imeDialogInitialized = false;
 bool useSideNavigation = true;
 bool navigationFocused = false;
 bool androidTvMode = true;
-int navigationWidth = 96;
+constexpr int kSideRailCollapsed = 118;
+constexpr int kSideRailExpanded = 360;
+int navigationWidth = kSideRailCollapsed;
 
 void drawNavigationIcon(
     Scene2D& scene, int index, int centerX, int centerY, Color color);
@@ -123,30 +125,32 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
     scene.DrawRectangle(0, 0, railWidth, kHeight, rail);
     scene.DrawVerticalFade(0, 0, railWidth, 160,
         Color{42, 29, 74}, 190, 0);
-    scene.DrawVerticalFade(railWidth - 18, 0, 18, kHeight,
-        Color{65, 43, 110}, 110, 25);
+    scene.DrawRectangle(railWidth - 2, 0, 2, kHeight, Color{39, 32, 55});
     if (railWidth > 250) {
         drawBrand(scene, text);
         scene.DrawText(42, 116, "WATCH  DISCOVER  ENJOY", muted, 1);
         scene.DrawRectangle(34, 151, railWidth - 68, 2, Color{51, 46, 66});
     }
-    else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
+    else if (headerLogo.valid()) scene.BlitRgbScaledRounded(
+        (railWidth - 60) / 2, 27, 60, 60, 14,
         headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     const char* labels[] = {"Movies", "Series", "Public domain", "Search", "Settings"};
     for (int index = 0; index < kTopTabCount; ++index) {
         const int y = 190 + index * 112;
         if (index == activeTab) {
-            scene.DrawRoundedRectangle(22, y,
-                railWidth > 250 ? railWidth - 44 : 58, 76, 38, selected);
-            scene.DrawRoundedRectangle(24, y + 5, 6, 66, 3, purple);
+            scene.DrawRoundedRectangle(20, y,
+                railWidth > 250 ? railWidth - 40 : railWidth - 40,
+                76, 38, selected);
         }
-        scene.DrawRoundedRectangle(34, y + 10, 56, 56, 28,
+        const int iconX = railWidth > 250 ? 34 : (railWidth - 56) / 2;
+        const int iconCenter = iconX + 28;
+        scene.DrawRoundedRectangle(iconX, y + 10, 56, 56, 28,
             index == activeTab ? purple : Color{31, 29, 42});
-        drawNavigationIcon(scene, index, 62, y + 38,
+        drawNavigationIcon(scene, index, iconCenter, y + 38,
             index == activeTab ? text : muted);
         if (railWidth > 210) {
             const int labelWidth = scene.MeasureText(labels[index], 2);
-            scene.DrawText(196 - labelWidth / 2, y + 29, labels[index],
+            scene.DrawText(220 - labelWidth / 2, y + 29, labels[index],
                 index == activeTab ? text : muted, 2);
         }
     }
@@ -347,6 +351,10 @@ void drawHardwareProbe(
     const Color mutedText = {164, 158, 181};
 
     scene.FrameBufferFill(background);
+    const int contentLeft = useSideNavigation ? kSideRailCollapsed : 0;
+    if (androidTvMode && heroArtwork && heroArtwork->valid())
+        scene.BlitRgbMasked(contentLeft, 0, heroArtwork->width,
+            heroArtwork->height, heroArtwork->pixels.data());
     const int cardX[] = {150, 440, 730, 1020, 1310, 1600};
     const int cardY = (androidTvMode ? 590 : 320) + catalogMotion;
     const int selectedIndex = page * kCatalogPageSize + focusedCard;
@@ -423,11 +431,7 @@ void drawHardwareProbe(
 
     // Paint the navigation after moving rows. This is a hard content viewport:
     // outgoing cards disappear behind it instead of crossing the top menu.
-    const int contentLeft = useSideNavigation ? 96 : 0;
-    if (androidTvMode && heroArtwork && heroArtwork->valid()) {
-        scene.BlitRgbMasked(contentLeft, 0, heroArtwork->width,
-            heroArtwork->height, heroArtwork->pixels.data());
-    } else {
+    if (!(androidTvMode && heroArtwork && heroArtwork->valid())) {
         scene.DrawRectangle(contentLeft, 0, kWidth - contentLeft, 240, background);
         scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 210,
             header, 220, 0);
@@ -489,9 +493,10 @@ void drawHardwareProbe(
         "Recommended for you", text, 3);
     scene.DrawText(150, androidTvMode ? 946 : 740,
         status.c_str(), mutedText, 2);
-    scene.DrawVerticalFade(250, 970, kWidth - 250, 110, header, 0, 230);
-    drawButtonHint(scene, 1630, 1020, 'X', "DETAILS");
-    drawStickHint(scene, 300, 1015, "NAVIGATE");
+    scene.DrawRectangle(contentLeft, 978, kWidth - contentLeft, 102,
+        Color{16, 14, 23});
+    drawStickHint(scene, contentLeft + 42, 1007, "NAVIGATE");
+    drawButtonHint(scene, 1650, 1010, 'X', "DETAILS");
     drawNavigation(scene, activeTab);
 }
 
@@ -515,7 +520,9 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     for (int index = 0; index < 3; ++index) {
         scene.DrawRoundedRectangle(filterX, 225, filterWidths[index], 62, 20,
             index == filter ? purple : header);
-        scene.DrawText(filterX + 30, 244, filters[index],
+        const int filterTextWidth = scene.MeasureText(filters[index], 2);
+        scene.DrawText(filterX + (filterWidths[index] - filterTextWidth) / 2,
+            244, filters[index],
             index == filter ? text : muted, 2);
         filterX += filterWidths[index] + 24;
     }
@@ -537,13 +544,14 @@ void drawSearch(Scene2D& scene, const std::string& query, int filter,
     scene.DrawText(tipsX + 45, 610, "LEFT / RIGHT CHANGES THE FILTER", muted, 2);
     scene.DrawText(tipsX + 45, 650, "UP TO 24 RESULTS WITH CACHED POSTERS", muted, 2);
     scene.DrawText(tipsX + 45, 690, "OPEN RESULTS FOR DETAILS AND STREAMS", muted, 2);
-    scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
-    drawButtonHint(scene, 900, 1020, '<', "FILTER");
-    drawButtonHint(scene, 1080, 1020, '>', "FILTER");
-    drawButtonHint(scene, 1250, 1020, 'O', "CLEAR / BACK");
-    drawButtonHint(scene, 1435, 1020, 'T', "SEARCH");
-    drawButtonHint(scene, 1660, 1020, 'X', "KEYBOARD");
-    drawStickHint(scene, 300, 1015, "NAVIGATE");
+    scene.DrawRectangle(kSideRailCollapsed, 978,
+        kWidth - kSideRailCollapsed, 102, Color{16, 14, 23});
+    drawStickHint(scene, kSideRailCollapsed + 42, 1007, "NAVIGATE");
+    drawButtonHint(scene, 610, 1010, '<', "FILTER");
+    drawButtonHint(scene, 810, 1010, '>', "FILTER");
+    drawButtonHint(scene, 1030, 1010, 'O', "CLEAR / BACK");
+    drawButtonHint(scene, 1325, 1010, 'T', "SEARCH");
+    drawButtonHint(scene, 1580, 1010, 'X', "KEYBOARD");
     drawNavigation(scene, 3);
 }
 
@@ -583,10 +591,11 @@ void drawSettingsRows(Scene2D& scene, const char* const* rows, int rowCount,
             scene.DrawText(1640, y + 17, ">", text, 2);
         }
     }
-    scene.DrawVerticalFade(0, 930, kWidth, 150, header, 0, 230);
-    drawButtonHint(scene, 1390, 1020, 'O', "BACK");
-    drawButtonHint(scene, 1640, 1020, 'X', action);
-    drawStickHint(scene, 360, 1015, "NAVIGATE");
+    scene.DrawRectangle(kSideRailCollapsed, 978,
+        kWidth - kSideRailCollapsed, 102, Color{16, 14, 23});
+    drawStickHint(scene, kSideRailCollapsed + 42, 1007, "NAVIGATE");
+    drawButtonHint(scene, 1390, 1010, 'O', "BACK");
+    drawButtonHint(scene, 1640, 1010, 'X', action);
     drawNavigation(scene, 4);
 }
 
@@ -601,7 +610,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v4.03"};
+        "ABOUT STREMIO  v4.04"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -2091,8 +2100,8 @@ void* heroArtworkEntry(void* argument) {
         decodePosterJpeg(encoded, 1920, 1080, decoded) ? 1 : -1;
     if (job->result > 0 && !cached) writeCachedFile(stored, encoded);
     if (job->result > 0) {
-        constexpr int targetWidth = kWidth - 96;
-        constexpr int targetHeight = 570;
+        constexpr int targetWidth = kWidth - kSideRailCollapsed;
+        constexpr int targetHeight = kHeight;
         job->artwork.width = targetWidth;
         job->artwork.height = targetHeight;
         job->artwork.pixels.resize(
@@ -2104,17 +2113,24 @@ void* heroArtworkEntry(void* argument) {
         const int sourceHeight = static_cast<int>(targetHeight / scale);
         const int sourceX = (decoded.width - sourceWidth) / 2;
         const int sourceY = (decoded.height - sourceHeight) / 2;
+        std::vector<int> sourceColumns(static_cast<size_t>(targetWidth));
+        for (int x = 0; x < targetWidth; ++x)
+            sourceColumns[static_cast<size_t>(x)] =
+                sourceX + x * sourceWidth / targetWidth;
         for (int y = 0; y < targetHeight; ++y) {
             const int sy = sourceY + y * sourceHeight / targetHeight;
             for (int x = 0; x < targetWidth; ++x) {
-                const int sx = sourceX + x * sourceWidth / targetWidth;
+                const int sx = sourceColumns[static_cast<size_t>(x)];
                 const uint32_t source = decoded.pixels[
                     static_cast<size_t>(sy) * decoded.width + sx];
                 // Precompose one continuous cinema-style scrim into the hero
                 // once, off the render thread. This removes the center seam
                 // and avoids blending millions of pixels during navigation.
                 const int horizontal = x < 1050 ? 205 - x * 190 / 1050 : 15;
-                const int vertical = y > 330 ? (y - 330) * 170 / 240 : 0;
+                // The lower half remains visible behind the catalog while a
+                // stronger scrim keeps poster labels readable.
+                const int vertical = y > 330 ?
+                    std::min(205, (y - 330) * 205 / 520) : 0;
                 const int opacity = std::min(232,
                     horizontal + vertical - horizontal * vertical / 255);
                 const int inverse = 255 - opacity;
@@ -3183,14 +3199,13 @@ int main() {
                     const int oldAbsolute = absolute--;
                     catalogPage = absolute / kCatalogPageSize;
                     focusedCard = absolute % kCatalogPageSize;
-                    if (oldAbsolute > 2) catalogHorizontalMotion = -290;
+                    (void)oldAbsolute;
                 }
                 if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
                     absolute + 1 < static_cast<int>(catalogItems.size())) {
                     ++absolute;
                     catalogPage = absolute / kCatalogPageSize;
                     focusedCard = absolute % kCatalogPageSize;
-                    if (absolute > 2) catalogHorizontalMotion = 290;
                     if (static_cast<int>(catalogItems.size()) - absolute < 8)
                         startPagePrefetch();
                 }
@@ -3215,14 +3230,14 @@ int main() {
                     catalogPage = nextPage;
                     // New selection enters from below; the preview row itself
                     // remains stationary until it becomes the active row.
-                    catalogMotion = 480;
+                    catalogMotion = 0;
                     if (catalogPage * kCatalogPageSize + focusedCard >=
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
             if (!androidTvMode && (pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
-                catalogMotion = -480;
+                catalogMotion = 0;
             }
             if (activeTab == 3 &&
                 (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0) {
@@ -3868,21 +3883,20 @@ int main() {
         scene.FrameBufferSwap();
         ++frameId;
         ++animationFrame;
-        const int navigationTarget = useSideNavigation && navigationFocused ? 330 : 96;
+        const int navigationTarget = useSideNavigation && navigationFocused ?
+            kSideRailExpanded : kSideRailCollapsed;
         if (navigationWidth != navigationTarget) {
-            const int delta = navigationTarget - navigationWidth;
-            navigationWidth += std::abs(delta) < 8 ? delta : delta / 3;
+            // A full 1080p software redraw for every intermediate width made
+            // the rail animation run at 8-10 FPS. Switch atomically and let
+            // both framebuffers receive the finished layout at 60 Hz.
+            navigationWidth = navigationTarget;
             staticScreenKey = ~0ull;
         }
         if (catalogMotion != 0) {
             catalogMotion = catalogMotion * 3 / 4;
             if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
         }
-        if (catalogHorizontalMotion != 0) {
-            catalogHorizontalMotion = catalogHorizontalMotion * 2 / 3;
-            if (catalogHorizontalMotion > -3 &&
-                catalogHorizontalMotion < 3) catalogHorizontalMotion = 0;
-        }
+        catalogHorizontalMotion = 0;
         if (activeTab < 3 && !catalogItems.empty() &&
             static_cast<int>(catalogItems.size()) -
                 (catalogPage + 2) * kCatalogPageSize <= kCatalogPageSize)
