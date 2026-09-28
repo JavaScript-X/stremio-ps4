@@ -268,6 +268,12 @@ falls back to MetaHub artwork and title logos when catalog summaries omit them.
 The segmented Videodec2 path now starts the companion's HLS audio rendition in
 parallel through Sony AVPlayer so supported streams provide video and audio.
 
+Version 3.92 replaces Android TV paging with a continuous, animated horizontal
+carousel and only opens the sidebar at the true beginning of the catalog. Hero
+logos preserve their aspect ratio inside a bounded title area, transient
+wallpaper requests retry after catalog networking becomes idle, and the sidebar
+uses native film, television, play, search, and settings icons.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

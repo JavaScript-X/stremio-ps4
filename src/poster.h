@@ -31,6 +31,14 @@ bool decodePosterJpeg(
     int outputHeight,
     PosterImage& poster);
 
+// Decode while preserving the source aspect ratio inside the requested box.
+// Used for title logos so wide artwork never overlaps hero metadata.
+bool decodePosterImageContain(
+    const std::string& encoded,
+    int maximumWidth,
+    int maximumHeight,
+    PosterImage& image);
+
 void preparePosterPresentation(
     PosterImage& poster, int cornerRadius,
     int previewWidth, int previewHeight);

@@ -1,5 +1,7 @@
 #include "poster.h"
 
+#include <algorithm>
+
 #define STBI_NO_STDIO
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -53,6 +55,31 @@ bool decodePosterJpeg(
     }
     stbi_image_free(decoded);
     return true;
+}
+
+bool decodePosterImageContain(
+    const std::string& encoded,
+    int maximumWidth,
+    int maximumHeight,
+    PosterImage& image) {
+    if (encoded.empty() || maximumWidth <= 0 || maximumHeight <= 0)
+        return false;
+    int sourceWidth = 0;
+    int sourceHeight = 0;
+    int channels = 0;
+    if (!stbi_info_from_memory(
+            reinterpret_cast<const stbi_uc*>(encoded.data()),
+            static_cast<int>(encoded.size()), &sourceWidth, &sourceHeight,
+            &channels) || sourceWidth <= 0 || sourceHeight <= 0)
+        return false;
+    int width = maximumWidth;
+    int height = sourceHeight * maximumWidth / sourceWidth;
+    if (height > maximumHeight) {
+        height = maximumHeight;
+        width = sourceWidth * maximumHeight / sourceHeight;
+    }
+    return decodePosterJpeg(encoded, std::max(1, width),
+        std::max(1, height), image);
 }
 
 void preparePosterPresentation(

@@ -98,6 +98,9 @@ bool navigationFocused = false;
 bool androidTvMode = true;
 int navigationWidth = 96;
 
+void drawNavigationIcon(
+    Scene2D& scene, int index, int centerX, int centerY, Color color);
+
 void requestExit(int) {
     exitRequested = 1;
 }
@@ -130,7 +133,6 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
     else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
         headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     const char* labels[] = {"Movies", "Series", "Public domain", "Search", "Settings"};
-    const char* glyphs[] = {"M", "TV", "P", "Q", "S"};
     for (int index = 0; index < kTopTabCount; ++index) {
         const int y = 190 + index * 112;
         if (index == activeTab) {
@@ -140,10 +142,8 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
         }
         scene.DrawRoundedRectangle(34, y + 10, 56, 56, 28,
             index == activeTab ? purple : Color{31, 29, 42});
-        const int glyphWidth = scene.MeasureText(glyphs[index],
-            index == 1 ? 1 : 2);
-        scene.DrawText(62 - glyphWidth / 2, y + 28, glyphs[index], text,
-            index == 1 ? 1 : 2);
+        drawNavigationIcon(scene, index, 62, y + 38,
+            index == activeTab ? text : muted);
         if (railWidth > 210) {
             const int labelWidth = scene.MeasureText(labels[index], 2);
             scene.DrawText(196 - labelWidth / 2, y + 29, labels[index],
@@ -207,6 +207,53 @@ void drawLine(
         const int doubled = error * 2;
         if (doubled >= dy) { error += dy; x0 += sx; }
         if (doubled <= dx) { error += dx; y0 += sy; }
+    }
+}
+
+void drawNavigationIcon(
+    Scene2D& scene, int index, int centerX, int centerY, Color color) {
+    if (index == 0) {
+        // Film frame with two sprocket holes.
+        scene.DrawRoundedRectangle(centerX - 17, centerY - 13, 34, 26, 5,
+            color);
+        scene.DrawRectangle(centerX - 12, centerY - 8, 24, 16,
+            Color{31, 29, 42});
+        scene.DrawRectangle(centerX - 14, centerY - 9, 4, 4, color);
+        scene.DrawRectangle(centerX + 10, centerY + 5, 4, 4, color);
+    } else if (index == 1) {
+        // Television / series.
+        scene.DrawRoundedRectangle(centerX - 18, centerY - 13, 36, 25, 5,
+            color);
+        scene.DrawRectangle(centerX - 13, centerY - 8, 26, 15,
+            Color{31, 29, 42});
+        drawLine(scene, centerX - 7, centerY + 17,
+            centerX + 7, centerY + 17, color, 3);
+    } else if (index == 2) {
+        // Public-domain play mark.
+        scene.DrawRoundedRectangle(centerX - 17, centerY - 17, 34, 34, 17,
+            color);
+        drawLine(scene, centerX - 5, centerY - 8,
+            centerX + 9, centerY, Color{31, 29, 42}, 4);
+        drawLine(scene, centerX + 9, centerY,
+            centerX - 5, centerY + 8, Color{31, 29, 42}, 4);
+    } else if (index == 3) {
+        // Search glass.
+        scene.DrawRoundedRectangle(centerX - 14, centerY - 14, 23, 23, 12,
+            color);
+        scene.DrawRoundedRectangle(centerX - 9, centerY - 9, 13, 13, 7,
+            Color{31, 29, 42});
+        drawLine(scene, centerX + 7, centerY + 7,
+            centerX + 17, centerY + 17, color, 5);
+    } else {
+        // Settings cog, kept geometric for the bitmap renderer.
+        scene.DrawRoundedRectangle(centerX - 15, centerY - 15, 30, 30, 15,
+            color);
+        scene.DrawRoundedRectangle(centerX - 7, centerY - 7, 14, 14, 7,
+            Color{31, 29, 42});
+        scene.DrawRectangle(centerX - 3, centerY - 20, 6, 8, color);
+        scene.DrawRectangle(centerX - 3, centerY + 12, 6, 8, color);
+        scene.DrawRectangle(centerX - 20, centerY - 3, 8, 6, color);
+        scene.DrawRectangle(centerX + 12, centerY - 3, 8, 6, color);
     }
 }
 
@@ -288,6 +335,7 @@ void drawHardwareProbe(
     int indicatorX,
     int animationFrame,
     int catalogMotion,
+    int catalogHorizontalMotion,
     const PosterImage* heroArtwork,
     const PosterImage* heroLogo) {
     const Color background = {11, 10, 17};
@@ -301,15 +349,16 @@ void drawHardwareProbe(
     scene.FrameBufferFill(background);
     const int cardX[] = {150, 440, 730, 1020, 1310, 1600};
     const int cardY = (androidTvMode ? 590 : 320) + catalogMotion;
-    auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
-                              bool showTitles, int scalePercent) {
-        if (rowPage < 0 || rowY >= 1000 || rowY + 390 <= 145) return;
+    const int selectedIndex = page * kCatalogPageSize + focusedCard;
+    auto drawCatalogRow = [&](int rowStartIndex, int rowY, bool selected,
+                              bool showTitles, int scalePercent, int xOffset) {
+        if (rowStartIndex < 0 || rowY >= 1000 || rowY + 390 <= 145) return;
         const int cardWidth = 235 * scalePercent / 100;
         const int cardHeight = 330 * scalePercent / 100;
         for (int index = 0; index < kCatalogPageSize; ++index) {
-        const int itemIndex = rowPage * kCatalogPageSize + index;
-        const int x = cardX[index] + (235 - cardWidth) / 2;
-        if (selected && index == focusedCard) {
+        const int itemIndex = rowStartIndex + index;
+        const int x = cardX[index] + (235 - cardWidth) / 2 + xOffset;
+        if (selected && itemIndex == selectedIndex) {
             // Keep focus stable. A flashing/pulsing border distracts from the
             // poster artwork and costs redraw work on every catalog frame.
             scene.DrawRoundedRectangle(x - 9, rowY - 9,
@@ -350,21 +399,27 @@ void drawHardwareProbe(
 
     // During paging, preserve the old row and move it out while the exact
     // cards that were visible below move into the selected position.
-    if (catalogMotion > 0)
-        drawCatalogRow(page - 1, cardY - 480, false, true, 100);
-    else if (catalogMotion < 0)
-        drawCatalogRow(page + 1, cardY + 480, false, true, 100);
-    // Use the precomputed 90% texture for most of the rise and switch to the
-    // full poster near its destination. Avoid resampling four JPEGs per frame.
-    const int selectedScale = catalogMotion > 48 ? 90 : 100;
-    drawCatalogRow(page, cardY, true, true, selectedScale);
-
-    const int nextPage = page + 1;
-    // The next row stays still. Movement belongs to page selection, not an
-    // always-running animation that consumes GPU time and looks like jumping.
-    const int previewY = 805 + (catalogMotion > 0 ? catalogMotion : 0);
-    if (!androidTvMode && catalogMotion >= 0)
-        drawCatalogRow(nextPage, previewY, false, false, 90);
+    if (androidTvMode) {
+        // Keep the selected title near the third slot and slide one continuous
+        // catalog underneath it. There are no visible six-item "pages".
+        const int rowStart = std::max(0, selectedIndex - 2);
+        drawCatalogRow(rowStart, cardY, true, true, 100,
+            catalogHorizontalMotion);
+    } else {
+        if (catalogMotion > 0)
+            drawCatalogRow((page - 1) * kCatalogPageSize, cardY - 480,
+                false, true, 100, 0);
+        else if (catalogMotion < 0)
+            drawCatalogRow((page + 1) * kCatalogPageSize, cardY + 480,
+                false, true, 100, 0);
+        const int selectedScale = catalogMotion > 48 ? 90 : 100;
+        drawCatalogRow(page * kCatalogPageSize, cardY, true, true,
+            selectedScale, 0);
+        const int previewY = 805 + (catalogMotion > 0 ? catalogMotion : 0);
+        if (catalogMotion >= 0)
+            drawCatalogRow((page + 1) * kCatalogPageSize, previewY,
+                false, false, 90, 0);
+    }
 
     // Paint the navigation after moving rows. This is a hard content viewport:
     // outgoing cards disappear behind it instead of crossing the top menu.
@@ -387,14 +442,17 @@ void drawHardwareProbe(
         (catalogType == "publicdomain" ? "PUBLIC DOMAIN / FEATURED" :
         (activeTab == 3 ? "SEARCH / RESULTS" : "MOVIES / POPULAR")),
         stremioPurple, 2);
-    const int selectedIndex = page * kCatalogPageSize + focusedCard;
     std::string featured = selectedIndex < static_cast<int>(items.size())
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
     if (androidTvMode && heroLogo && heroLogo->valid())
-        scene.BlitRgbMasked(150, 78, heroLogo->width, heroLogo->height,
+        scene.BlitRgbMasked(150, 76, heroLogo->width, heroLogo->height,
             heroLogo->pixels.data());
-    else scene.DrawText(150, 90, featured.c_str(), text, 5);
+    else {
+        const int titleScale = featured.size() > 30 ? 3 :
+            (featured.size() > 18 ? 4 : 5);
+        scene.DrawText(150, 90, featured.c_str(), text, titleScale);
+    }
     if (androidTvMode && selectedIndex < static_cast<int>(items.size())) {
         const CatalogItem& selectedItem = items[selectedIndex];
         std::string facts;
@@ -425,8 +483,11 @@ void drawHardwareProbe(
     } else scene.DrawText(150, 155,
         "Browse with the D-pad or L3 stick", mutedText, 2);
     char pageText[64];
-    snprintf(pageText, sizeof(pageText), "PAGE %d  /  %d TITLES", page + 1,
-        static_cast<int>(items.size()));
+    if (androidTvMode)
+        snprintf(pageText, sizeof(pageText), "TITLE %d  /  %d",
+            selectedIndex + 1, static_cast<int>(items.size()));
+    else snprintf(pageText, sizeof(pageText), "PAGE %d  /  %d TITLES", page + 1,
+            static_cast<int>(items.size()));
     scene.DrawRoundedRectangle(1510, 36, 330, 62, 31, Color{35, 32, 47});
     scene.DrawText(1550, 56, pageText, mutedText, 2);
     scene.DrawText(150, androidTvMode ? 535 : 215,
@@ -541,7 +602,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v3.91"};
+        "ABOUT STREMIO  v3.92"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -1891,8 +1952,8 @@ void* heroArtworkEntry(void* argument) {
             logoStored, kMaximumPosterBytes, logoEncoded);
         const int logoBytes = logoCached ? static_cast<int>(logoEncoded.size()) :
             downloadUrl(job->logoUrl.c_str(), kMaximumPosterBytes, logoEncoded);
-        if (logoBytes > 0 && decodePosterJpeg(
-                logoEncoded, 520, 150, job->logo) && !logoCached)
+        if (logoBytes > 0 && decodePosterImageContain(
+                logoEncoded, 500, 95, job->logo) && !logoCached)
             writeCachedFile(logoStored, logoEncoded);
     }
     job->completed.store(true, std::memory_order_release);
@@ -2164,6 +2225,7 @@ int main() {
     int indicatorX = 350;
     int animationFrame = 0;
     int catalogMotion = 0;
+    int catalogHorizontalMotion = 0;
     int searchKey = 0;
     int settingsSelection = 0;
     int settingsPage = 0;
@@ -2475,7 +2537,8 @@ int main() {
         drawHardwareProbe(
             scene, focusedCard, catalogPage, catalogType, catalogStatus,
             catalogItems, catalogPosters, activeTab, indicatorX,
-            animationFrame, catalogMotion, nullptr, nullptr);
+            animationFrame, catalogMotion, catalogHorizontalMotion,
+            nullptr, nullptr);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
@@ -2501,6 +2564,11 @@ int main() {
                 heroArtwork = std::move(heroJob.artwork);
                 heroLogo = std::move(heroJob.logo);
                 heroArtworkId = heroJob.itemId;
+            } else if (heroRequestedId == heroJob.itemId) {
+                // Catalog poster workers share Sony's HTTP context. Retry the
+                // hero after they become idle instead of permanently caching
+                // a transient concurrent-request failure.
+                heroRequestedId.clear();
             }
             staticScreenKey = ~0ull;
         }
@@ -2732,11 +2800,17 @@ int main() {
             videoDec2.state() == VideoDec2Probe::State::Idle;
         if (shellVisible && androidTvMode && activeTab < 4 &&
             !catalogItems.empty()) {
+            bool catalogNetworkBusy = pageJob.running.load(
+                std::memory_order_acquire);
+            for (int index = 0; index < 3; ++index)
+                catalogNetworkBusy = catalogNetworkBusy ||
+                    catalogJobs[index].running.load(std::memory_order_acquire);
             const int selectedIndex = catalogPage * kCatalogPageSize + focusedCard;
             if (selectedIndex >= 0 &&
                 selectedIndex < static_cast<int>(catalogItems.size())) {
                 const CatalogItem& selected = catalogItems[selectedIndex];
                 if (selected.id != heroRequestedId &&
+                    !catalogNetworkBusy &&
                     !heroJob.running.load(std::memory_order_acquire)) {
                     heroRequestedId = selected.id;
                     heroJob.itemId = selected.id;
@@ -2776,7 +2850,10 @@ int main() {
 
         bool navigationInputConsumed = false;
         if (shellVisible && useSideNavigation) {
-            const bool canEnterRail = catalogScreen ? focusedCard == 0 : true;
+            const int absoluteSelection =
+                catalogPage * kCatalogPageSize + focusedCard;
+            const bool canEnterRail = catalogScreen ?
+                absoluteSelection == 0 : true;
             if (!navigationFocused && canEnterRail &&
                 (pressed & ORBIS_PAD_BUTTON_LEFT) != 0) {
                 navigationFocused = true;
@@ -2835,22 +2912,30 @@ int main() {
             if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0)
                 loadSearchResults();
         } else if (shellVisible && !navigationFocused && !navigationInputConsumed && catalogScreen) {
-            if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
-                --focusedCard;
-            if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
-                focusedCard < kCatalogPageSize - 1 &&
-                catalogPage * kCatalogPageSize + focusedCard + 1 <
-                    static_cast<int>(catalogItems.size())) ++focusedCard;
-            else if (androidTvMode &&
-                (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
-                focusedCard == kCatalogPageSize - 1) {
-                const int nextPage = catalogPage + 1;
-                if (nextPage * kCatalogPageSize <
-                        static_cast<int>(catalogItems.size())) {
-                    catalogPage = nextPage;
-                    focusedCard = 0;
+            if (androidTvMode) {
+                int absolute = catalogPage * kCatalogPageSize + focusedCard;
+                if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && absolute > 0) {
+                    const int oldAbsolute = absolute--;
+                    catalogPage = absolute / kCatalogPageSize;
+                    focusedCard = absolute % kCatalogPageSize;
+                    if (oldAbsolute > 2) catalogHorizontalMotion = -290;
                 }
-                startPagePrefetch();
+                if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
+                    absolute + 1 < static_cast<int>(catalogItems.size())) {
+                    ++absolute;
+                    catalogPage = absolute / kCatalogPageSize;
+                    focusedCard = absolute % kCatalogPageSize;
+                    if (absolute > 2) catalogHorizontalMotion = 290;
+                    if (static_cast<int>(catalogItems.size()) - absolute < 8)
+                        startPagePrefetch();
+                }
+            } else {
+                if ((pressed & ORBIS_PAD_BUTTON_LEFT) != 0 && focusedCard > 0)
+                    --focusedCard;
+                if ((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
+                    focusedCard < kCatalogPageSize - 1 &&
+                    catalogPage * kCatalogPageSize + focusedCard + 1 <
+                        static_cast<int>(catalogItems.size())) ++focusedCard;
             }
             if (!androidTvMode && (pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
                 const int nextPage = catalogPage + 1;
@@ -3467,6 +3552,8 @@ int main() {
             key ^= useSideNavigation ? 0x200000ull : 0;
             key ^= androidTvMode ? 0x400000ull : 0;
             key ^= static_cast<uint64_t>(navigationWidth) << 40;
+            key ^= static_cast<uint64_t>(
+                static_cast<uint16_t>(catalogHorizontalMotion)) << 16;
             key ^= stableHash(heroArtworkId);
             if (key != staticScreenKey) {
                 staticScreenKey = key;
@@ -3483,7 +3570,8 @@ int main() {
                 drawHardwareProbe(
                     scene, focusedCard, catalogPage, catalogType, catalogStatus,
                     catalogItems, catalogPosters, activeTab, indicatorX,
-                    animationFrame, catalogMotion, activeHero, activeLogo);
+                    animationFrame, catalogMotion, catalogHorizontalMotion,
+                    activeHero, activeLogo);
                 --staticScreenFrames;
             }
         }
@@ -3501,6 +3589,11 @@ int main() {
         if (catalogMotion != 0) {
             catalogMotion = catalogMotion * 3 / 4;
             if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
+        }
+        if (catalogHorizontalMotion != 0) {
+            catalogHorizontalMotion = catalogHorizontalMotion * 2 / 3;
+            if (catalogHorizontalMotion > -3 &&
+                catalogHorizontalMotion < 3) catalogHorizontalMotion = 0;
         }
         if (activeTab < 3 && !catalogItems.empty() &&
             static_cast<int>(catalogItems.size()) -
