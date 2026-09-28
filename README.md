@@ -256,6 +256,12 @@ addon no longer makes the app appear frozen. The bundled Stremio typeface is
 baked at twice the previous resolution in a 1024px atlas for sharper large
 headings while retaining state-based framebuffer caching for a 60 FPS shell.
 
+Version 3.90 rebuilds Android TV mode around a cached cinematic backdrop, an
+immediate selected-title synopsis and metadata hero, and one continuous
+horizontal poster rail. The left navigation opens and closes with a lightweight
+width animation, background artwork loads without blocking the shell, and
+routine successful playback notifications no longer obscure the interface.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

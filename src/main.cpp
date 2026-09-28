@@ -96,6 +96,7 @@ bool imeDialogInitialized = false;
 bool useSideNavigation = true;
 bool navigationFocused = false;
 bool androidTvMode = true;
+int navigationWidth = 96;
 
 void requestExit(int) {
     exitRequested = 1;
@@ -115,11 +116,11 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {135, 130, 151};
-    const int railWidth = navigationFocused ? 330 : 96;
+    const int railWidth = navigationWidth;
     scene.DrawRectangle(0, 0, railWidth, kHeight, rail);
     scene.DrawVerticalFade(railWidth - 18, 0, 18, kHeight,
         Color{65, 43, 110}, 110, 25);
-    if (navigationFocused) drawBrand(scene, text);
+    if (railWidth > 250) drawBrand(scene, text);
     else if (headerLogo.valid()) scene.BlitRgbScaledRounded(18, 27, 60, 60, 14,
         headerLogo.pixels.data(), headerLogo.width, headerLogo.height);
     const char* labels[] = {"Movies", "Series", "Public domain", "Search", "Settings"};
@@ -128,7 +129,7 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
         const int y = 190 + index * 112;
         if (index == activeTab) {
             scene.DrawRoundedRectangle(22, y,
-                navigationFocused ? 286 : 58, 76, 38, selected);
+                railWidth > 250 ? railWidth - 44 : 58, 76, 38, selected);
         }
         scene.DrawRoundedRectangle(34, y + 10, 56, 56, 28,
             index == activeTab ? purple : Color{31, 29, 42});
@@ -136,13 +137,13 @@ void drawSideNavigation(Scene2D& scene, int activeTab) {
             index == 1 ? 1 : 2);
         scene.DrawText(62 - glyphWidth / 2, y + 28, glyphs[index], text,
             index == 1 ? 1 : 2);
-        if (navigationFocused) {
+        if (railWidth > 210) {
             const int labelWidth = scene.MeasureText(labels[index], 2);
             scene.DrawText(196 - labelWidth / 2, y + 29, labels[index],
                 index == activeTab ? text : muted, 2);
         }
     }
-    if (navigationFocused) {
+    if (railWidth > 250) {
         scene.DrawText(55, 885, "Navigate", text, 2);
         scene.DrawText(55, 925, "UP / DOWN   Sections", muted, 1);
         scene.DrawText(55, 957, "RIGHT / CROSS   Open", muted, 1);
@@ -276,7 +277,8 @@ void drawHardwareProbe(
     int activeTab,
     int indicatorX,
     int animationFrame,
-    int catalogMotion) {
+    int catalogMotion,
+    const PosterImage* heroArtwork) {
     const Color background = {11, 10, 17};
     const Color header = {24, 22, 33};
     const Color stremioPurple = {123, 91, 214};
@@ -287,7 +289,7 @@ void drawHardwareProbe(
 
     scene.FrameBufferFill(background);
     const int cardX[] = {150, 440, 730, 1020, 1310, 1600};
-    const int cardY = (androidTvMode ? 535 : 320) + catalogMotion;
+    const int cardY = (androidTvMode ? 590 : 320) + catalogMotion;
     auto drawCatalogRow = [&](int rowPage, int rowY, bool selected,
                               bool showTitles, int scalePercent) {
         if (rowPage < 0 || rowY >= 1000 || rowY + 390 <= 145) return;
@@ -355,9 +357,22 @@ void drawHardwareProbe(
 
     // Paint the navigation after moving rows. This is a hard content viewport:
     // outgoing cards disappear behind it instead of crossing the top menu.
-    scene.DrawRectangle(250, 0, kWidth - 250, 240, background);
-    scene.DrawVerticalFade(250, 0, kWidth - 250, 210, header, 220, 0);
-    scene.DrawText(300, 40,
+    const int contentLeft = useSideNavigation ? 96 : 0;
+    if (androidTvMode && heroArtwork && heroArtwork->valid()) {
+        scene.BlitRgbScaledRounded(contentLeft, 0, kWidth - contentLeft, 570, 0,
+            heroArtwork->pixels.data(), heroArtwork->width,
+            heroArtwork->height, 100);
+        scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 570,
+            Color{8, 7, 13}, 110, 245);
+        scene.DrawRectangle(contentLeft, 0, 760, 570, Color{8, 7, 13});
+        scene.DrawVerticalFade(contentLeft + 700, 0, 300, 570,
+            Color{8, 7, 13}, 245, 0);
+    } else {
+        scene.DrawRectangle(contentLeft, 0, kWidth - contentLeft, 240, background);
+        scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 210,
+            header, 220, 0);
+    }
+    scene.DrawText(150, 38,
         catalogType == "series" ? "SERIES / POPULAR" :
         (catalogType == "publicdomain" ? "PUBLIC DOMAIN / FEATURED" :
         (activeTab == 3 ? "SEARCH / RESULTS" : "MOVIES / POPULAR")),
@@ -366,28 +381,44 @@ void drawHardwareProbe(
     std::string featured = selectedIndex < static_cast<int>(items.size())
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
-    scene.DrawText(300, 82, featured.c_str(), text, 5);
-    if (androidTvMode && selectedIndex < static_cast<int>(posters.size()) &&
-        posters[selectedIndex].valid()) {
-        scene.BlitRgbScaledRounded(1250, 15, 620, 520, 28,
-            posters[selectedIndex].pixels.data(), posters[selectedIndex].width,
-            posters[selectedIndex].height, 95);
-        scene.DrawRoundedRectangle(300, 165, 760, 250, 30, header);
-        scene.DrawText(345, 205, "FEATURED ON STREMIO", stremioPurple, 2);
-        scene.DrawText(345, 258, featured.c_str(), text, 4);
-        scene.DrawText(345, 330,
-            "Press Cross for details, episodes and available streams.",
-            mutedText, 2);
-    } else scene.DrawText(300, 155,
+    scene.DrawText(150, 90, featured.c_str(), text, 5);
+    if (androidTvMode && selectedIndex < static_cast<int>(items.size())) {
+        const CatalogItem& selectedItem = items[selectedIndex];
+        std::string facts;
+        if (!selectedItem.releaseInfo.empty()) facts += selectedItem.releaseInfo;
+        if (!selectedItem.runtime.empty()) {
+            if (!facts.empty()) facts += "   |   ";
+            facts += selectedItem.runtime;
+        }
+        if (!selectedItem.imdbRating.empty()) {
+            if (!facts.empty()) facts += "   |   ";
+            facts += "IMDB ";
+            facts += selectedItem.imdbRating;
+        }
+        scene.DrawText(150, 175, facts.empty() ? "STREMIO" : facts.c_str(),
+            stremioPurple, 2);
+        scene.DrawText(150, 218, selectedItem.genres.c_str(), mutedText, 2);
+        const std::vector<std::string> description = wrapText(
+            selectedItem.description.empty() ?
+                "Open for details, episodes and available streams." :
+                selectedItem.description, 62, 4);
+        int descriptionY = 270;
+        for (const std::string& line : description) {
+            scene.DrawText(150, descriptionY, line.c_str(), text, 2);
+            descriptionY += 38;
+        }
+        scene.DrawRoundedRectangle(150, 450, 230, 58, 29, stremioPurple);
+        scene.DrawText(194, 468, "X  DETAILS", text, 2);
+    } else scene.DrawText(150, 155,
         "Browse with the D-pad or L3 stick", mutedText, 2);
     char pageText[64];
     snprintf(pageText, sizeof(pageText), "PAGE %d  /  %d TITLES", page + 1,
         static_cast<int>(items.size()));
-    scene.DrawRoundedRectangle(1510, 46, 330, 62, 31, Color{35, 32, 47});
-    scene.DrawText(1550, 66, pageText, mutedText, 2);
-    scene.DrawText(300, androidTvMode ? 475 : 215,
+    scene.DrawRoundedRectangle(1510, 36, 330, 62, 31, Color{35, 32, 47});
+    scene.DrawText(1550, 56, pageText, mutedText, 2);
+    scene.DrawText(150, androidTvMode ? 535 : 215,
         "Recommended for you", text, 3);
-    scene.DrawText(300, androidTvMode ? 900 : 740,
+    scene.DrawText(150, androidTvMode ? 975 : 740,
         status.c_str(), mutedText, 2);
     scene.DrawVerticalFade(250, 930, kWidth - 250, 150, header, 0, 230);
     drawButtonHint(scene, 1370, 1020, 'S', "VIDEO TEST");
@@ -497,7 +528,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v3.80"};
+        "ABOUT STREMIO  v3.90"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -1792,6 +1823,33 @@ struct StreamLookupJob {
     std::vector<StreamItem> streams;
 };
 
+struct HeroArtworkJob {
+    pthread_t thread = {};
+    std::atomic<bool> running{false};
+    std::atomic<bool> completed{false};
+    std::string itemId;
+    std::string url;
+    PosterImage artwork;
+    int result = 0;
+};
+
+void* heroArtworkEntry(void* argument) {
+    HeroArtworkJob* job = static_cast<HeroArtworkJob*>(argument);
+    std::string encoded;
+    std::string url = job->url;
+    url += url.find('?') == std::string::npos ? "?format=jpg" : "&format=jpg";
+    const std::string stored = cachePath("background", url, "jpg");
+    const bool cached = readCachedFile(stored, kMaximumPosterBytes, encoded);
+    const int bytes = cached ? static_cast<int>(encoded.size()) :
+        downloadUrl(url.c_str(), kMaximumPosterBytes, encoded);
+    job->result = bytes > 0 &&
+        decodePosterJpeg(encoded, 1180, 570, job->artwork) ? 1 : -1;
+    if (job->result > 0 && !cached) writeCachedFile(stored, encoded);
+    job->completed.store(true, std::memory_order_release);
+    job->running.store(false, std::memory_order_release);
+    return nullptr;
+}
+
 void* streamLookupEntry(void* argument) {
     StreamLookupJob* job = static_cast<StreamLookupJob*>(argument);
     job->streams.clear();
@@ -2110,6 +2168,10 @@ int main() {
     StreamPrepareJob streamJob;
     HlsSegmentJob hlsJob;
     StreamLookupJob streamLookupJob;
+    HeroArtworkJob heroJob;
+    PosterImage heroArtwork;
+    std::string heroArtworkId;
+    std::string heroRequestedId;
     catalogJobs[0].type = "movie";
     catalogJobs[1].type = "series";
     catalogJobs[2].type = "publicdomain";
@@ -2360,7 +2422,7 @@ int main() {
         drawHardwareProbe(
             scene, focusedCard, catalogPage, catalogType, catalogStatus,
             catalogItems, catalogPosters, activeTab, indicatorX,
-            animationFrame, catalogMotion);
+            animationFrame, catalogMotion, nullptr);
         scene.SubmitFlip(frameId);
         scene.FrameWait(frameId);
         scene.FrameBufferSwap();
@@ -2369,6 +2431,14 @@ int main() {
     activateCatalog(0, false);
 
     while (!exitRequested) {
+        if (heroJob.completed.exchange(false, std::memory_order_acq_rel)) {
+            pthread_join(heroJob.thread, nullptr);
+            if (heroJob.result > 0) {
+                heroArtwork = std::move(heroJob.artwork);
+                heroArtworkId = heroJob.itemId;
+            }
+            staticScreenKey = ~0ull;
+        }
         if (streamLookupJob.completed.exchange(false,
                 std::memory_order_acq_rel)) {
             pthread_join(streamLookupJob.thread, nullptr);
@@ -2581,6 +2651,30 @@ int main() {
         const bool shellVisible =
             !previewVisible && !detailVisible && !streamVisible &&
             videoDec2.state() == VideoDec2Probe::State::Idle;
+        if (shellVisible && androidTvMode && activeTab < 4 &&
+            !catalogItems.empty()) {
+            const int selectedIndex = catalogPage * kCatalogPageSize + focusedCard;
+            if (selectedIndex >= 0 &&
+                selectedIndex < static_cast<int>(catalogItems.size())) {
+                const CatalogItem& selected = catalogItems[selectedIndex];
+                if (selected.id != heroRequestedId &&
+                    selected.background.compare(0, 8, "https://") == 0 &&
+                    !heroJob.running.load(std::memory_order_acquire)) {
+                    heroRequestedId = selected.id;
+                    heroJob.itemId = selected.id;
+                    heroJob.url = selected.background;
+                    heroJob.result = 0;
+                    heroJob.artwork = {};
+                    heroJob.running.store(true, std::memory_order_release);
+                    heroJob.completed.store(false, std::memory_order_release);
+                    if (pthread_create(&heroJob.thread, nullptr,
+                            heroArtworkEntry, &heroJob) != 0) {
+                        heroJob.running.store(false, std::memory_order_release);
+                        heroRequestedId.clear();
+                    }
+                }
+            }
+        }
         const bool catalogScreen = activeTab < 3 ||
             (activeTab == 3 && searchShowingResults);
         if (shellVisible && !navigationFocused &&
@@ -2656,7 +2750,18 @@ int main() {
                 focusedCard < kCatalogPageSize - 1 &&
                 catalogPage * kCatalogPageSize + focusedCard + 1 <
                     static_cast<int>(catalogItems.size())) ++focusedCard;
-            if ((pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
+            else if (androidTvMode &&
+                (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0 &&
+                focusedCard == kCatalogPageSize - 1) {
+                const int nextPage = catalogPage + 1;
+                if (nextPage * kCatalogPageSize <
+                        static_cast<int>(catalogItems.size())) {
+                    catalogPage = nextPage;
+                    focusedCard = 0;
+                }
+                startPagePrefetch();
+            }
+            if (!androidTvMode && (pressed & ORBIS_PAD_BUTTON_DOWN) != 0) {
                 const int nextPage = catalogPage + 1;
                 if ((nextPage + 1) * kCatalogPageSize >=
                         static_cast<int>(catalogItems.size()) &&
@@ -2674,7 +2779,7 @@ int main() {
                         static_cast<int>(catalogItems.size())) focusedCard = 0;
                 }
             }
-            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
+            if (!androidTvMode && (pressed & ORBIS_PAD_BUTTON_UP) != 0 && catalogPage > 0) {
                 --catalogPage;
                 catalogMotion = -480;
             }
@@ -3124,17 +3229,7 @@ int main() {
             static VideoDec2Probe::State reportedVideoDec2State =
                 VideoDec2Probe::State::Idle;
             if (videoDec2.state() != reportedVideoDec2State) {
-                if (videoDec2.state() == VideoDec2Probe::State::Passed) {
-                    notify("Stremio: direct Videodec2 produced GPU frames");
-                } else if (videoDec2.state() == VideoDec2Probe::State::Finished) {
-                    char result[128];
-                    snprintf(result, sizeof(result),
-                        "Stremio: Videodec2 %u.%u fps / %llu frames",
-                        videoDec2.measuredFpsTimesTen() / 10,
-                        videoDec2.measuredFpsTimesTen() % 10,
-                        static_cast<unsigned long long>(videoDec2.decodedFrames()));
-                    notify(result);
-                } else if (videoDec2.state() == VideoDec2Probe::State::Failed) {
+                if (videoDec2.state() == VideoDec2Probe::State::Failed) {
                     char result[128];
                     snprintf(result, sizeof(result),
                         "Stremio: Videodec2 stage %d code 0x%08x AU %u",
@@ -3279,15 +3374,22 @@ int main() {
             key ^= navigationFocused ? 0x100000ull : 0;
             key ^= useSideNavigation ? 0x200000ull : 0;
             key ^= androidTvMode ? 0x400000ull : 0;
+            key ^= static_cast<uint64_t>(navigationWidth) << 40;
+            key ^= stableHash(heroArtworkId);
             if (key != staticScreenKey) {
                 staticScreenKey = key;
                 staticScreenFrames = kFrameBuffers;
             }
             if (staticScreenFrames > 0) {
+                const int selectedIndex = catalogPage * kCatalogPageSize + focusedCard;
+                const PosterImage* activeHero = androidTvMode &&
+                    selectedIndex >= 0 && selectedIndex < static_cast<int>(catalogItems.size()) &&
+                    catalogItems[selectedIndex].id == heroArtworkId && heroArtwork.valid()
+                    ? &heroArtwork : nullptr;
                 drawHardwareProbe(
                     scene, focusedCard, catalogPage, catalogType, catalogStatus,
                     catalogItems, catalogPosters, activeTab, indicatorX,
-                    animationFrame, catalogMotion);
+                    animationFrame, catalogMotion, activeHero);
                 --staticScreenFrames;
             }
         }
@@ -3296,6 +3398,12 @@ int main() {
         scene.FrameBufferSwap();
         ++frameId;
         ++animationFrame;
+        const int navigationTarget = useSideNavigation && navigationFocused ? 330 : 96;
+        if (navigationWidth != navigationTarget) {
+            const int delta = navigationTarget - navigationWidth;
+            navigationWidth += std::abs(delta) < 8 ? delta : delta / 3;
+            staticScreenKey = ~0ull;
+        }
         if (catalogMotion != 0) {
             catalogMotion = catalogMotion * 3 / 4;
             if (catalogMotion > -3 && catalogMotion < 3) catalogMotion = 0;
@@ -3328,6 +3436,9 @@ int main() {
     if (streamLookupJob.running.load(std::memory_order_acquire) ||
         streamLookupJob.completed.load(std::memory_order_acquire))
         pthread_join(streamLookupJob.thread, nullptr);
+    if (heroJob.running.load(std::memory_order_acquire) ||
+        heroJob.completed.load(std::memory_order_acquire))
+        pthread_join(heroJob.thread, nullptr);
     hlsJob.active = false;
     if (hlsJob.running.load(std::memory_order_acquire) ||
         hlsJob.completed.load(std::memory_order_acquire))

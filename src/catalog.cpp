@@ -182,6 +182,13 @@ bool parseCatalogItems(
                 if (findStringField(object, "id", item.id) &&
                     findStringField(object, "name", item.name)) {
                     findStringField(object, "poster", item.poster);
+                    findStringField(object, "background", item.background);
+                    findStringField(object, "logo", item.logo);
+                    findStringField(object, "description", item.description);
+                    findStringField(object, "releaseInfo", item.releaseInfo);
+                    findStringField(object, "runtime", item.runtime);
+                    findStringField(object, "imdbRating", item.imdbRating);
+                    findStringArrayField(object, "genres", item.genres);
                     items.push_back(item);
                 }
                 objectStart = std::string::npos;

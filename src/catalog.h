@@ -9,6 +9,13 @@ struct CatalogItem {
     std::string id;
     std::string name;
     std::string poster;
+    std::string background;
+    std::string logo;
+    std::string description;
+    std::string releaseInfo;
+    std::string runtime;
+    std::string imdbRating;
+    std::string genres;
 };
 
 struct MetaDetails {
