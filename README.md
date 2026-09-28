@@ -274,6 +274,15 @@ logos preserve their aspect ratio inside a bounded title area, transient
 wallpaper requests retry after catalog networking becomes idle, and the sidebar
 uses native film, television, play, search, and settings icons.
 
+Version 4.00 turns the stream flow into a reusable movie-player session. Addon
+results are cached persistently per title, the source picker has a modern
+six-row list and focused-source inspector, and teardown fully resets segment,
+decoder, audio, and preview state before another source starts. Companion audio
+now opens the declared master HLS manifest instead of an invalid bare rendition
+URL. The player adds a hideable HUD, fit/fill aspect modes, synchronized
+pause/restart, and 250 ms audio-sync controls while rendering each decoded frame
+into both cached framebuffers for a responsive 60 FPS controller loop.
+
 Controller controls:
 
 - **D-pad or left analog stick** moves through cards and vertical lists.

@@ -602,7 +602,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v3.92"};
+        "ABOUT STREMIO  v4.00"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -680,19 +680,30 @@ void drawPlayerSelection(Scene2D& scene, int selected, int indicatorX) {
 
 void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
     const std::vector<uint32_t>& pixels, uint32_t previewWidth,
-    uint32_t previewHeight) {
+    uint32_t previewHeight, const std::string& title, bool hudVisible,
+    int aspectMode, int audioOffsetMs, bool audioActive) {
     const Color background = {8, 8, 12};
     const Color panel = {29, 29, 39};
     const Color purple = {123, 91, 214};
     const Color text = {235, 232, 244};
     const Color muted = {164, 158, 181};
     scene.FrameBufferFill(background);
-    if (!pixels.empty() && previewWidth > 0 && previewHeight > 0)
-        scene.BlitRgbScaled(0, 0, kWidth, kHeight, pixels.data(),
-            previewWidth, previewHeight);
-    scene.DrawVerticalFade(0, 0, kWidth, 220, panel, 235, 0);
-    drawBrand(scene, text);
-    scene.DrawText(120, 190, "DIRECT VIDEODEC2 GPU PLAYER", text, 4);
+    if (!pixels.empty() && previewWidth > 0 && previewHeight > 0) {
+        int videoX = 0, videoY = 0, videoWidth = kWidth, videoHeight = kHeight;
+        if (aspectMode == 0) {
+            videoHeight = static_cast<int>(
+                static_cast<uint64_t>(kWidth) * previewHeight / previewWidth);
+            if (videoHeight > kHeight) {
+                videoHeight = kHeight;
+                videoWidth = static_cast<int>(
+                    static_cast<uint64_t>(kHeight) * previewWidth / previewHeight);
+            }
+            videoX = (kWidth - videoWidth) / 2;
+            videoY = (kHeight - videoHeight) / 2;
+        }
+        scene.BlitRgbScaled(videoX, videoY, videoWidth, videoHeight,
+            pixels.data(), previewWidth, previewHeight);
+    }
     char metrics[160];
     snprintf(metrics, sizeof(metrics),
         "OUTPUT %ux%u   AU %u   FRAMES %llu   DECODE %u.%u FPS",
@@ -702,6 +713,9 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
         decoder.measuredFpsTimesTen() / 10,
         decoder.measuredFpsTimesTen() % 10);
     if (pixels.empty()) {
+        scene.DrawVerticalFade(0, 0, kWidth, 220, panel, 235, 0);
+        drawBrand(scene, text);
+        scene.DrawText(120, 190, "DIRECT VIDEODEC2 GPU PLAYER", text, 4);
         scene.DrawRoundedRectangle(280, 315, 1360, 430, 34, panel);
         scene.DrawRoundedRectangle(330, 370, 120, 120, 30, purple);
         scene.DrawText(365, 405, "GPU", text, 3);
@@ -711,20 +725,43 @@ void drawVideoDec2Test(Scene2D& scene, const VideoDec2Probe& decoder,
             "INITIALIZING DIRECT HARDWARE PLAYBACK...", muted, 2);
         scene.DrawRoundedRectangle(505, 555, 1035, 90, 22, background);
         scene.DrawText(545, 585, metrics, text, 2);
-    } else {
-        scene.DrawRoundedRectangle(420, 870, 1080, 74, 18, panel);
-        scene.DrawText(470, 895, metrics, text, 2);
+    } else if (hudVisible) {
+        scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 230, 0);
+        scene.DrawText(70, 55, "NOW PLAYING", purple, 1);
+        const std::string displayTitle = title.empty() ? "STREMIO STREAM" :
+            (title.size() > 48 ? title.substr(0, 45) + "..." : title);
+        scene.DrawText(70, 92, displayTitle.c_str(), text, 3);
+        scene.DrawRoundedRectangle(70, 148, 240, 42, 21, panel);
+        scene.DrawText(96, 160, "VIDEODEC2  H.264", muted, 1);
+        scene.DrawRoundedRectangle(326, 148, 210, 42, 21,
+            audioActive ? Color{45, 94, 72} : Color{92, 45, 55});
+        scene.DrawText(350, 160,
+            audioActive ? "AUDIO  ACTIVE" : "AUDIO  OFF", text, 1);
+        scene.DrawRoundedRectangle(560, 148, 210, 42, 21, panel);
+        scene.DrawText(590, 160,
+            aspectMode == 0 ? "ASPECT  FIT" : "ASPECT  FILL", muted, 1);
+        scene.DrawRoundedRectangle(370, 835, 1180, 72, 24, panel);
+        scene.DrawText(420, 861, metrics, text, 2);
         const uint64_t duration = decoder.duration();
         const int progress = duration ? static_cast<int>(
             std::min<uint64_t>(1000, decoder.currentTime() * 1000 / duration)) : 0;
-        scene.DrawRoundedRectangle(460, 960, 1000, 12, 6, panel);
-        scene.DrawRoundedRectangle(460, 960, progress, 12, 6, purple);
+        scene.DrawRoundedRectangle(180, 940, 1560, 14, 7, panel);
+        scene.DrawRoundedRectangle(180, 940, progress * 1560 / 1000,
+            14, 7, purple);
+        char sync[64];
+        snprintf(sync, sizeof(sync), "AUDIO SYNC  %+d MS", audioOffsetMs);
+        scene.DrawText(1500, 902, sync, muted, 1);
     }
-    scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
-    drawButtonHint(scene, 40, 1020, 'X',
-        decoder.paused() ? "RESUME" : "PAUSE");
-    drawButtonHint(scene, 310, 1020, 'T', "RESTART");
-    drawButtonHint(scene, 1640, 1020, 'O', "STOP");
+    if (hudVisible || pixels.empty()) {
+        scene.DrawVerticalFade(0, 970, kWidth, 110, panel, 0, 235);
+        drawButtonHint(scene, 40, 1020, 'X',
+            decoder.paused() ? "RESUME" : "PAUSE");
+        drawButtonHint(scene, 285, 1020, 'T', "RESTART");
+        drawButtonHint(scene, 520, 1020, 'S', "HIDE HUD");
+        scene.DrawText(790, 1035, "UP  ASPECT    L1 / R1  AUDIO SYNC",
+            muted, 1);
+        drawButtonHint(scene, 1640, 1020, 'O', "STOP");
+    }
 }
 
 void drawQualitySelection(Scene2D& scene, int selected, int indicatorX,
@@ -870,14 +907,20 @@ void drawStreams(
     scene.FrameBufferFill(background);
     scene.DrawVerticalFade(0, 0, kWidth, 210, panel, 235, 0);
     drawBrand(scene, text);
-    scene.DrawText(120, 145, "CHOOSE A STREAM", text, 4);
-    scene.DrawText(120, 205, details.name.c_str(), muted, 2);
-    scene.DrawRoundedRectangle(1420, 175, 360, 70, 20, purple);
+    scene.DrawText(120, 132, "AVAILABLE STREAMS", text, 4);
+    scene.DrawText(120, 195, details.name.c_str(), muted, 2);
+    scene.DrawRoundedRectangle(120, 230, 210, 48, 24, purple);
+    scene.DrawText(158, 245, "BEST MATCH", text, 1);
+    scene.DrawRoundedRectangle(348, 230, 220, 48, 24, panel);
+    scene.DrawText(388, 245, "MOST PEERS", muted, 1);
+    scene.DrawRoundedRectangle(586, 230, 245, 48, 24, panel);
+    scene.DrawText(624, 245, "CACHED RESULTS", muted, 1);
+    scene.DrawRoundedRectangle(1450, 175, 350, 70, 20, purple);
     char count[64];
     snprintf(count, sizeof(count), "%d SOURCES FOUND",
         static_cast<int>(streams.size()));
-    scene.DrawText(1470, 197, count, text, 2);
-    constexpr int visibleRows = 5;
+    scene.DrawText(1495, 197, count, text, 2);
+    constexpr int visibleRows = 6;
     const int maximumStart = std::max(0,
         static_cast<int>(streams.size()) - visibleRows);
     const int firstVisible = std::min(maximumStart,
@@ -885,26 +928,25 @@ void drawStreams(
     for (int row = 0; row < visibleRows; ++row) {
         const int index = firstVisible + row;
         if (index >= static_cast<int>(streams.size())) break;
-        const int y = 270 + row * 126;
+        const int y = 300 + row * 101;
         const bool selected = index == focusedStream;
-        scene.DrawRoundedRectangle(120, y, 1680, 108, 20,
+        scene.DrawRoundedRectangle(120, y, 1270, 86, 18,
             selected ? focus : panel);
-        scene.DrawRoundedRectangle(145, y + 18, 58, 58, 16,
+        if (selected) scene.DrawRectangle(120, y + 12, 7, 62, purple);
+        scene.DrawRoundedRectangle(145, y + 14, 58, 58, 16,
             selected ? purple : Color{52, 52, 68});
         char sourceNumber[8];
         snprintf(sourceNumber, sizeof(sourceNumber), "%02d", index + 1);
-        scene.DrawText(158, y + 36, sourceNumber, text, 2);
+        scene.DrawText(158, y + 32, sourceNumber, text, 2);
         const StreamItem& stream = streams[index];
         // Addons commonly put resolution, codec, release, peers and size in
         // title, while name is only the provider badge.
         const std::string label = !stream.title.empty() ? stream.title :
             (!stream.fileName.empty() ? stream.fileName :
             (!stream.name.empty() ? stream.name : "STREAM"));
-        const std::vector<std::string> labelLines = wrapText(label, 52, 2);
-        if (!labelLines.empty()) scene.DrawText(230, y + 17,
+        const std::vector<std::string> labelLines = wrapText(label, 58, 1);
+        if (!labelLines.empty()) scene.DrawText(230, y + 14,
             labelLines[0].c_str(), text, 2);
-        if (labelLines.size() > 1) scene.DrawText(230, y + 49,
-            labelLines[1].c_str(), selected ? Color{215, 205, 235} : muted, 1);
         std::string sizeText = "SIZE UNKNOWN";
         if (stream.videoSize > 0) {
             char size[48];
@@ -923,22 +965,46 @@ void drawStreams(
             torrentInfo += "   SEEDS " + std::to_string(stream.seeders);
         if (stream.peers >= 0)
             torrentInfo += "   PEERS " + std::to_string(stream.peers);
-        scene.DrawText(230, y + 78, torrentInfo.c_str(),
+        scene.DrawText(230, y + 55, torrentInfo.c_str(),
             selected ? Color{215, 205, 235} : muted, 1);
-        scene.DrawText(1510, y + 39,
+        scene.DrawText(1110, y + 34,
             stream.name.empty() ?
                 (stream.url.empty() ? "COMPANION" : "DIRECT") :
                 shortTitle(stream.name).c_str(),
-            text, 2);
+            selected ? text : muted, 1);
+    }
+    if (!streams.empty() && focusedStream >= 0 &&
+        focusedStream < static_cast<int>(streams.size())) {
+        const StreamItem& selected = streams[focusedStream];
+        scene.DrawRoundedRectangle(1430, 300, 370, 590, 28, panel);
+        scene.DrawText(1470, 342, "SOURCE DETAILS", purple, 2);
+        const std::string provider = selected.name.empty() ?
+            (selected.url.empty() ? "TORRENT / COMPANION" : "DIRECT URL") :
+            selected.name;
+        const std::vector<std::string> providerLines = wrapText(provider, 24, 3);
+        for (size_t line = 0; line < providerLines.size(); ++line)
+            scene.DrawText(1470, 400 + static_cast<int>(line) * 34,
+                providerLines[line].c_str(), text, 2);
+        scene.DrawText(1470, 525, "AVAILABILITY", muted, 1);
+        char availability[96];
+        snprintf(availability, sizeof(availability), "SEEDS %d    PEERS %d",
+            selected.seeders, selected.peers);
+        scene.DrawText(1470, 558, availability, text, 2);
+        scene.DrawText(1470, 625, "PLAYBACK", muted, 1);
+        scene.DrawText(1470, 658,
+            selected.infoHash.empty() ? "DIRECT STREAM" :
+            "VIDEODEC2 + SONY AUDIO", text, 2);
+        scene.DrawRoundedRectangle(1470, 745, 290, 68, 34, purple);
+        scene.DrawText(1525, 767, "X  PLAY NOW", text, 2);
     }
     if (firstVisible > 0)
-        scene.DrawText(1840, 290, "^", focus, 3);
+        scene.DrawText(1360, 305, "^", focus, 3);
     if (firstVisible + visibleRows < static_cast<int>(streams.size()))
-        scene.DrawText(1840, 855, "v", focus, 3);
+        scene.DrawText(1360, 855, "v", focus, 3);
     char position[48];
     snprintf(position, sizeof(position), "%d / %d", focusedStream + 1,
         static_cast<int>(streams.size()));
-    scene.DrawText(1720, 875, position, muted, 2);
+    scene.DrawText(1700, 850, position, muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 235);
     drawButtonHint(scene, 40, 1020, 'O', "DETAILS");
     drawStickHint(scene, 420, 1015, "SELECT SOURCE");
@@ -1785,6 +1851,90 @@ int fetchAddonStreams(
     return successfulAddons ? -8 : -9;
 }
 
+void appendCacheU32(std::string& data, uint32_t value) {
+    for (int shift = 0; shift < 32; shift += 8)
+        data.push_back(static_cast<char>((value >> shift) & 255));
+}
+
+bool readCacheU32(const std::string& data, size_t& position, uint32_t& value) {
+    if (position + 4 > data.size()) return false;
+    value = 0;
+    for (int shift = 0; shift < 32; shift += 8)
+        value |= static_cast<uint32_t>(
+            static_cast<uint8_t>(data[position++])) << shift;
+    return true;
+}
+
+void appendCacheString(std::string& data, const std::string& value) {
+    appendCacheU32(data, static_cast<uint32_t>(value.size()));
+    data.append(value);
+}
+
+bool readCacheString(
+    const std::string& data, size_t& position, std::string& value) {
+    uint32_t length = 0;
+    if (!readCacheU32(data, position, length) ||
+        length > kMaximumCatalogBytes || position + length > data.size())
+        return false;
+    value.assign(data, position, length);
+    position += length;
+    return true;
+}
+
+bool saveStreamCache(
+    const std::string& key, const std::vector<StreamItem>& streams) {
+    std::string data("S4SC1", 5);
+    appendCacheU32(data, static_cast<uint32_t>(streams.size()));
+    for (const StreamItem& stream : streams) {
+        appendCacheString(data, stream.name);
+        appendCacheString(data, stream.title);
+        appendCacheString(data, stream.url);
+        appendCacheString(data, stream.infoHash);
+        appendCacheString(data, stream.fileName);
+        appendCacheU32(data, static_cast<uint32_t>(stream.videoSize));
+        appendCacheU32(data, static_cast<uint32_t>(stream.videoSize >> 32));
+        appendCacheU32(data, static_cast<uint32_t>(stream.seeders + 1));
+        appendCacheU32(data, static_cast<uint32_t>(stream.peers + 1));
+        appendCacheU32(data, static_cast<uint32_t>(stream.fileIndex + 1));
+    }
+    writeCachedFile(cachePath("streams", key, "bin"), data);
+    return true;
+}
+
+bool loadStreamCache(
+    const std::string& key, std::vector<StreamItem>& streams) {
+    std::string data;
+    if (!readCachedFile(cachePath("streams", key, "bin"),
+            kMaximumCatalogBytes, data) || data.compare(0, 5, "S4SC1") != 0)
+        return false;
+    size_t position = 5;
+    uint32_t count = 0;
+    if (!readCacheU32(data, position, count) || count > 64) return false;
+    std::vector<StreamItem> loaded;
+    for (uint32_t index = 0; index < count; ++index) {
+        StreamItem stream;
+        uint32_t low = 0, high = 0, seeders = 0, peers = 0, fileIndex = 0;
+        if (!readCacheString(data, position, stream.name) ||
+            !readCacheString(data, position, stream.title) ||
+            !readCacheString(data, position, stream.url) ||
+            !readCacheString(data, position, stream.infoHash) ||
+            !readCacheString(data, position, stream.fileName) ||
+            !readCacheU32(data, position, low) ||
+            !readCacheU32(data, position, high) ||
+            !readCacheU32(data, position, seeders) ||
+            !readCacheU32(data, position, peers) ||
+            !readCacheU32(data, position, fileIndex)) return false;
+        stream.videoSize = static_cast<uint64_t>(low) |
+            (static_cast<uint64_t>(high) << 32);
+        stream.seeders = static_cast<int>(seeders) - 1;
+        stream.peers = static_cast<int>(peers) - 1;
+        stream.fileIndex = static_cast<int>(fileIndex) - 1;
+        loaded.push_back(std::move(stream));
+    }
+    streams.swap(loaded);
+    return !streams.empty();
+}
+
 int fetchPosters(
     const std::vector<CatalogItem>& items,
     std::vector<PosterImage>& posters) {
@@ -1893,6 +2043,7 @@ struct StreamLookupJob {
     std::string catalogType;
     std::string streamType;
     std::string streamId;
+    std::string cacheKey;
     std::vector<std::string> addonUrls;
     std::vector<StreamItem> streams;
 };
@@ -2214,6 +2365,10 @@ int main() {
     std::vector<uint32_t> directPreviewPixels;
     uint32_t directPreviewWidth = 0;
     uint32_t directPreviewHeight = 0;
+    bool playerHudVisible = true;
+    int playerAspectMode = 0;
+    int playerAudioOffsetMs = 0;
+    int playerUiRedrawFrames = 2;
     uint64_t staticScreenKey = ~0ull;
     int staticScreenFrames = 2;
     std::vector<CatalogItem> catalogItems;
@@ -2353,6 +2508,25 @@ int main() {
         pthread_attr_destroy(&attributes);
         if (result != 0) hlsJob.running.store(false, std::memory_order_release);
         return result == 0;
+    };
+
+    auto resetHlsSession = [&]() {
+        hlsJob.active = false;
+        hlsJob.segmentWaiting = false;
+        const bool running = hlsJob.running.load(std::memory_order_acquire);
+        if (running) pthread_cancel(hlsJob.thread);
+        if (running || hlsJob.completed.load(std::memory_order_acquire))
+            pthread_join(hlsJob.thread, nullptr);
+        hlsJob.running.store(false, std::memory_order_release);
+        hlsJob.completed.store(false, std::memory_order_release);
+        hlsJob.segmentUrls.clear();
+        hlsJob.nextSegment = 0;
+        hlsJob.readySegment = -1;
+        videoDec2.stop();
+        streamAudioPlayer.stop();
+        directPreviewPixels.clear();
+        directPreviewWidth = 0;
+        directPreviewHeight = 0;
     };
 
     auto startAccountSync = [&]() {
@@ -2578,6 +2752,7 @@ int main() {
             if (streamLookupJob.showWhenReady &&
                 streamLookupJob.result > 0) {
                 streams.swap(streamLookupJob.streams);
+                saveStreamCache(streamLookupJob.cacheKey, streams);
                 focusedStream = 0;
                 streamVisible = true;
                 detailVisible = true;
@@ -2599,12 +2774,16 @@ int main() {
                     state == VideoDec2Probe::State::Finished) {
                     if (streamAudioPlayer.state() == AvPlayerProbe::State::Idle) {
                         streamAudioFailureReported = false;
+                        // The companion puts required rendition query data in
+                        // master.m3u8. A bare audio0.m3u8 is rejected by Sony
+                        // AVPlayer at AddSource (stage 4 / 0x806a0002).
                         const std::string audioPlaylist = hlsJob.baseUrl +
-                            "audio0.m3u8";
+                            "master.m3u8";
                         streamAudioPlayer.start(
                             audioPlaylist.c_str(), false, false, true);
                     }
                     videoDec2.start(hlsJob.outputPath.c_str());
+                    playerUiRedrawFrames = kFrameBuffers;
                     hlsJob.segmentWaiting = false;
                     startNextHlsSegment();
                 } else {
@@ -2767,10 +2946,7 @@ int main() {
 
         if ((pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0) {
             if (hlsJob.active) {
-                hlsJob.active = false;
-                hlsJob.segmentWaiting = false;
-                videoDec2.stop();
-                streamAudioPlayer.stop();
+                resetHlsSession();
             } else if (videoDec2.state() != VideoDec2Probe::State::Idle) {
                 videoDec2.stop();
             } else if (previewVisible ||
@@ -2792,6 +2968,26 @@ int main() {
             if ((pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0) {
                 videoDec2.restart();
                 if (hlsJob.active) streamAudioPlayer.restart();
+            }
+            if ((pressed & ORBIS_PAD_BUTTON_SQUARE) != 0) {
+                playerHudVisible = !playerHudVisible;
+                playerUiRedrawFrames = kFrameBuffers;
+            }
+            if ((pressed & ORBIS_PAD_BUTTON_UP) != 0) {
+                playerAspectMode = (playerAspectMode + 1) % 2;
+                playerUiRedrawFrames = kFrameBuffers;
+            }
+            if (hlsJob.active &&
+                (pressed & ORBIS_PAD_BUTTON_L1) != 0) {
+                streamAudioPlayer.seekRelative(-250);
+                playerAudioOffsetMs -= 250;
+                playerUiRedrawFrames = kFrameBuffers;
+            }
+            if (hlsJob.active &&
+                (pressed & ORBIS_PAD_BUTTON_R1) != 0) {
+                streamAudioPlayer.seekRelative(250);
+                playerAudioOffsetMs += 250;
+                playerUiRedrawFrames = kFrameBuffers;
             }
         }
 
@@ -3120,10 +3316,20 @@ int main() {
             if (addonUrls.empty() && catalogType != "publicdomain") {
                 notify("Stremio: link account and sync addons in Settings");
             } else {
+                const std::string lookupCacheKey = streamType + ":" + streamId;
+                std::vector<StreamItem> cachedStreams;
+                if (loadStreamCache(lookupCacheKey, cachedStreams)) {
+                    streams.swap(cachedStreams);
+                    focusedStream = 0;
+                    streamVisible = true;
+                    staticScreenKey = ~0ull;
+                    continue;
+                }
                 stopBackgroundForPlayback();
                 streamLookupJob.catalogType = catalogType;
                 streamLookupJob.streamType = streamType;
                 streamLookupJob.streamId = streamId;
+                streamLookupJob.cacheKey = lookupCacheKey;
                 streamLookupJob.addonUrls = addonUrls;
                 streamLookupJob.result = 0;
                 streamLookupJob.showWhenReady = true;
@@ -3162,6 +3368,7 @@ int main() {
             } else if (resolvedUrl.compare(0, 8, "https://") == 0 ||
                 resolvedUrl.compare(0, 7, "http://") == 0) {
                 if (!cacheRequested && !stream.infoHash.empty()) {
+                    resetHlsSession();
                     stopBackgroundForPlayback();
                     avPlayer.stop();
                     videoDec2.stop();
@@ -3178,6 +3385,10 @@ int main() {
                         stream.infoHash.c_str(),
                         stream.fileIndex >= 0 ? stream.fileIndex : -1);
                     hlsJob.baseUrl = hlsBase;
+                    playerHudVisible = true;
+                    playerAspectMode = 0;
+                    playerAudioOffsetMs = 0;
+                    playerUiRedrawFrames = kFrameBuffers;
                     streamVisible = false;
                     progressiveStreamStartedAt = sceKernelGetProcessTime();
                     notify("Stremio: buffering Videodec2 stream segment...");
@@ -3318,10 +3529,7 @@ int main() {
             queuedPlaybackTest = -1;
         }
         if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 && hlsJob.active) {
-            hlsJob.active = false;
-            hlsJob.segmentWaiting = false;
-            videoDec2.stop();
-            streamAudioPlayer.stop();
+            resetHlsSession();
             notify("Stremio: segmented Videodec2 stream stopped");
         } else if ((pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0 &&
             streamJob.running.load(std::memory_order_acquire)) {
@@ -3398,11 +3606,18 @@ int main() {
         }
 
         if (videoDec2.state() != VideoDec2Probe::State::Idle) {
-            staticScreenKey = ~0ull;
-            videoDec2.copyPreview(directPreviewPixels,
+            const bool newFrame = videoDec2.copyPreview(directPreviewPixels,
                 directPreviewWidth, directPreviewHeight);
-            drawVideoDec2Test(scene, videoDec2, directPreviewPixels,
-                directPreviewWidth, directPreviewHeight);
+            if (newFrame)
+                playerUiRedrawFrames = std::max(
+                    playerUiRedrawFrames, kFrameBuffers);
+            if (playerUiRedrawFrames > 0) {
+                drawVideoDec2Test(scene, videoDec2, directPreviewPixels,
+                    directPreviewWidth, directPreviewHeight, details.name,
+                    playerHudVisible, playerAspectMode, playerAudioOffsetMs,
+                    streamAudioPlayer.state() == AvPlayerProbe::State::Passed);
+                if (playerUiRedrawFrames > 0) --playerUiRedrawFrames;
+            }
             static VideoDec2Probe::State reportedVideoDec2State =
                 VideoDec2Probe::State::Idle;
             if (videoDec2.state() != reportedVideoDec2State) {
