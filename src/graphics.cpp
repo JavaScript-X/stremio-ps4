@@ -189,18 +189,24 @@ void Scene2D::DrawVerticalFade(
             (static_cast<int>(bottomOpacity) - topOpacity) * band /
                 (kBands - 1);
         const uint32_t inverse = 255 - opacity;
+        uint8_t redTable[256], greenTable[256], blueTable[256];
+        for (int value = 0; value < 256; ++value) {
+            redTable[value] = static_cast<uint8_t>(
+                (color.r * opacity + value * inverse) / 255);
+            greenTable[value] = static_cast<uint8_t>(
+                (color.g * opacity + value * inverse) / 255);
+            blueTable[value] = static_cast<uint8_t>(
+                (color.b * opacity + value * inverse) / 255);
+        }
         const int clippedTop = std::max(top, bandTop);
         const int clippedBottom = std::min(bottom, bandBottom);
         for (int row = clippedTop; row < clippedBottom; ++row) {
             uint32_t* destination = buffer + static_cast<size_t>(row) * width_;
             for (int column = left; column < right; ++column) {
                 const uint32_t dst = destination[column];
-                const uint32_t red = (color.r * opacity +
-                    ((dst >> 16) & 255) * inverse) / 255;
-                const uint32_t green = (color.g * opacity +
-                    ((dst >> 8) & 255) * inverse) / 255;
-                const uint32_t blue = (color.b * opacity +
-                    (dst & 255) * inverse) / 255;
+                const uint32_t red = redTable[(dst >> 16) & 255];
+                const uint32_t green = greenTable[(dst >> 8) & 255];
+                const uint32_t blue = blueTable[dst & 255];
                 destination[column] = 0x80000000u |
                     (red << 16) | (green << 8) | blue;
             }
@@ -295,6 +301,40 @@ void Scene2D::BlitRgbMasked(
         while (last > first && (source[last - 1] & 0xff000000u) != 0) --last;
         for (int column = first; column < last; ++column)
             destination[column] = 0x80000000u | source[column];
+    }
+}
+
+void Scene2D::BlitRgba(
+    int x, int y, int width, int height, const uint32_t* pixels) {
+    if (!pixels || width <= 0 || height <= 0) return;
+    const int firstRow = std::max(0, -y);
+    const int lastRow = std::min(height, height_ - y);
+    const int firstColumn = std::max(0, -x);
+    const int lastColumn = std::min(width, width_ - x);
+    if (firstRow >= lastRow || firstColumn >= lastColumn) return;
+    uint32_t* buffer = reinterpret_cast<uint32_t*>(frameBuffers_[activeFrameBuffer_]);
+    for (int row = firstRow; row < lastRow; ++row) {
+        uint32_t* destination = buffer + static_cast<size_t>(y + row) * width_ + x;
+        const uint32_t* source = pixels + static_cast<size_t>(row) * width;
+        for (int column = firstColumn; column < lastColumn; ++column) {
+            const uint32_t src = source[column];
+            const uint32_t alpha = src >> 24;
+            if (alpha == 0) continue;
+            if (alpha == 255) {
+                destination[column] = 0x80000000u | (src & 0x00ffffffu);
+                continue;
+            }
+            const uint32_t dst = destination[column];
+            const uint32_t inverse = 255 - alpha;
+            const uint32_t red = ((((src >> 16) & 255) * alpha) +
+                (((dst >> 16) & 255) * inverse)) / 255;
+            const uint32_t green = ((((src >> 8) & 255) * alpha) +
+                (((dst >> 8) & 255) * inverse)) / 255;
+            const uint32_t blue = (((src & 255) * alpha) +
+                ((dst & 255) * inverse)) / 255;
+            destination[column] = 0x80000000u |
+                (red << 16) | (green << 8) | blue;
+        }
     }
 }
 

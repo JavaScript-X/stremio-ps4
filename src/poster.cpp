@@ -72,14 +72,55 @@ bool decodePosterImageContain(
             static_cast<int>(encoded.size()), &sourceWidth, &sourceHeight,
             &channels) || sourceWidth <= 0 || sourceHeight <= 0)
         return false;
+    stbi_uc* decoded = stbi_load_from_memory(
+        reinterpret_cast<const stbi_uc*>(encoded.data()),
+        static_cast<int>(encoded.size()), &sourceWidth, &sourceHeight,
+        &channels, 4);
+    if (!decoded) return false;
+    int cropLeft = sourceWidth, cropTop = sourceHeight;
+    int cropRight = -1, cropBottom = -1;
+    for (int y = 0; y < sourceHeight; ++y) {
+        for (int x = 0; x < sourceWidth; ++x) {
+            if (decoded[(static_cast<size_t>(y) * sourceWidth + x) * 4 + 3] > 12) {
+                cropLeft = std::min(cropLeft, x);
+                cropRight = std::max(cropRight, x);
+                cropTop = std::min(cropTop, y);
+                cropBottom = std::max(cropBottom, y);
+            }
+        }
+    }
+    if (cropRight < cropLeft || cropBottom < cropTop) {
+        stbi_image_free(decoded);
+        return false;
+    }
+    const int cropWidth = cropRight - cropLeft + 1;
+    const int cropHeight = cropBottom - cropTop + 1;
     int width = maximumWidth;
-    int height = sourceHeight * maximumWidth / sourceWidth;
+    int height = cropHeight * maximumWidth / cropWidth;
     if (height > maximumHeight) {
         height = maximumHeight;
-        width = sourceWidth * maximumHeight / sourceHeight;
+        width = cropWidth * maximumHeight / cropHeight;
     }
-    return decodePosterJpeg(encoded, std::max(1, width),
-        std::max(1, height), image);
+    width = std::max(1, width);
+    height = std::max(1, height);
+    image = {};
+    image.width = width;
+    image.height = height;
+    image.pixels.resize(static_cast<size_t>(width) * height);
+    for (int y = 0; y < height; ++y) {
+        const int sourceY = cropTop + y * cropHeight / height;
+        for (int x = 0; x < width; ++x) {
+            const int sourceX = cropLeft + x * cropWidth / width;
+            const stbi_uc* pixel = decoded +
+                (static_cast<size_t>(sourceY) * sourceWidth + sourceX) * 4;
+            image.pixels[static_cast<size_t>(y) * width + x] =
+                (static_cast<uint32_t>(pixel[3]) << 24) |
+                (static_cast<uint32_t>(pixel[0]) << 16) |
+                (static_cast<uint32_t>(pixel[1]) << 8) | pixel[2];
+        }
+    }
+    stbi_image_free(decoded);
+    return true;
 }
 
 void preparePosterPresentation(

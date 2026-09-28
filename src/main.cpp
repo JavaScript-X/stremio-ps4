@@ -427,12 +427,6 @@ void drawHardwareProbe(
     if (androidTvMode && heroArtwork && heroArtwork->valid()) {
         scene.BlitRgbMasked(contentLeft, 0, heroArtwork->width,
             heroArtwork->height, heroArtwork->pixels.data());
-        scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 570,
-            Color{8, 7, 13}, 28, 145);
-        scene.DrawVerticalFade(contentLeft, 0, 860, 570,
-            Color{8, 7, 13}, 218, 180);
-        scene.DrawVerticalFade(contentLeft + 650, 0, 420, 570,
-            Color{8, 7, 13}, 170, 0);
     } else {
         scene.DrawRectangle(contentLeft, 0, kWidth - contentLeft, 240, background);
         scene.DrawVerticalFade(contentLeft, 0, kWidth - contentLeft, 210,
@@ -447,7 +441,7 @@ void drawHardwareProbe(
         ? items[selectedIndex].name : "Discover something to watch";
     if (featured.size() > 38) featured = featured.substr(0, 35) + "...";
     if (androidTvMode && heroLogo && heroLogo->valid())
-        scene.BlitRgbMasked(150, 76, heroLogo->width, heroLogo->height,
+        scene.BlitRgba(150, 78, heroLogo->width, heroLogo->height,
             heroLogo->pixels.data());
     else {
         const int titleScale = featured.size() > 30 ? 3 :
@@ -607,7 +601,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v4.02"};
+        "ABOUT STREMIO  v4.03"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -2114,8 +2108,24 @@ void* heroArtworkEntry(void* argument) {
             const int sy = sourceY + y * sourceHeight / targetHeight;
             for (int x = 0; x < targetWidth; ++x) {
                 const int sx = sourceX + x * sourceWidth / targetWidth;
+                const uint32_t source = decoded.pixels[
+                    static_cast<size_t>(sy) * decoded.width + sx];
+                // Precompose one continuous cinema-style scrim into the hero
+                // once, off the render thread. This removes the center seam
+                // and avoids blending millions of pixels during navigation.
+                const int horizontal = x < 1050 ? 205 - x * 190 / 1050 : 15;
+                const int vertical = y > 330 ? (y - 330) * 170 / 240 : 0;
+                const int opacity = std::min(232,
+                    horizontal + vertical - horizontal * vertical / 255);
+                const int inverse = 255 - opacity;
+                const uint32_t red = ((((source >> 16) & 255) * inverse) +
+                    8 * opacity) / 255;
+                const uint32_t green = ((((source >> 8) & 255) * inverse) +
+                    7 * opacity) / 255;
+                const uint32_t blue = (((source & 255) * inverse) +
+                    13 * opacity) / 255;
                 job->artwork.pixels[static_cast<size_t>(y) * targetWidth + x] =
-                    decoded.pixels[static_cast<size_t>(sy) * decoded.width + sx];
+                    (red << 16) | (green << 8) | blue;
             }
         }
     }
@@ -2127,7 +2137,7 @@ void* heroArtworkEntry(void* argument) {
         const int logoBytes = logoCached ? static_cast<int>(logoEncoded.size()) :
             downloadUrl(job->logoUrl.c_str(), kMaximumPosterBytes, logoEncoded);
         if (logoBytes > 0 && decodePosterImageContain(
-                logoEncoded, 500, 95, job->logo) && !logoCached)
+                logoEncoded, 440, 82, job->logo) && !logoCached)
             writeCachedFile(logoStored, logoEncoded);
     }
     job->completed.store(true, std::memory_order_release);

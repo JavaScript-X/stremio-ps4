@@ -35,6 +35,8 @@ public:
         const uint32_t* pixels, int sourceWidth, int sourceHeight);
     void BlitRgbMasked(
         int x, int y, int width, int height, const uint32_t* pixels);
+    void BlitRgba(
+        int x, int y, int width, int height, const uint32_t* pixels);
     void BlitRgbRounded(
         int x, int y, int width, int height, int radius,
         const uint32_t* pixels, uint8_t opacity = 255);
