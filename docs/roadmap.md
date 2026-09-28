@@ -1,49 +1,48 @@
 # Roadmap
 
-## M0 — hardware proof
+This roadmap tracks capabilities rather than historical package versions.
+Items marked validated were tested on a real PS4 running firmware 13.02.
 
-- [x] Reproducible OpenOrbis build and package
-- [x] Native 1080p double-buffered output
-- [x] Diagnostic notifications and clean home navigation
-- [x] Firmware 13.02 + HEN validation
+## Platform foundation
 
-## M1 — platform foundation
+- [x] Reproducible OpenOrbis Docker build and PKG packaging.
+- [x] Native 1920×1080 double-buffered output.
+- [x] DualShock 4 D-pad and analog navigation.
+- [x] Certificate-verified HTTPS and bounded cache storage.
+- [x] Stable native PS-button background/home behavior.
+- [ ] Validate additional firmware and jailbreak combinations.
 
-- [x] User service and DualShock 4 initialization
-- [x] Focus navigation and safe-area layout
-- [x] Network initialization and certificate-verified HTTPS request probe
-- Persistent, non-secret settings
-- [x] Packaged CC0 MP4 H.264 hardware-decoder frame probe
-- [x] Decoded NV12-to-RGB preview
-- [ ] Continuous silent MP4 playback and pause/resume (console validation pending)
-- [ ] Normal-motion playback timing diagnostic (console validation pending)
-- Legal HLS playback test asset
+## Stremio browsing
 
-## M2 — Stremio browsing
+- [x] Device-link account authentication.
+- [x] Synchronized addon collection.
+- [x] Movies, series, public domain, search, and metadata details.
+- [x] Episode selection and addon stream lookup.
+- [x] Persistent poster, wallpaper, logo, metadata, and stream caches.
+- [x] Android TV-inspired hero layout and continuous horizontal catalog.
+- [ ] Library and Continue Watching views.
+- [ ] Account watch-state and progress synchronization.
 
-- Device/account authentication
-- Home, discover, search, details, and library views
-- Addon manifest and resource transport
-- Poster caching with bounded storage
+## Playback
 
-## M3 — playback
+- [x] Direct Videodec2 H.264 hardware decoding.
+- [x] Companion fMP4/HLS torrent streaming pipeline.
+- [x] Companion audio through Sony AVPlayer.
+- [x] Pause, restart, stop, fit/fill, HUD, and audio-sync controls.
+- [x] Reusable playback-session teardown and second-stream startup.
+- [ ] Audio-language selection.
+- [ ] Subtitle download, selection, styling, and synchronization.
+- [ ] Reliable seeking across segmented torrent streams.
+- [ ] Broader MKV, HEVC, WebM, DASH, and unusual H.264 compatibility.
+- [ ] Resume playback after suspension or application restart.
 
-- Stream selection and capability checks
-- Direct HTTP/HLS playback
-- Pause, seek, audio track, and playback progress
-- Robust cancellation and error recovery
+## Usability and release engineering
 
-## M4 — companion server
-
-- Manual server configuration and LAN discovery
-- Streaming-server health/capability checks
-- Remux/transcode fallback
-- Secure pairing and clear offline behavior
-
-## M5 — daily usability
-
-- Continue Watching and library synchronization
-- Subtitle fetching, parsing, styling, and timing
-- Settings and diagnostics UI
-- Performance, memory, and long-session testing
-- Signed release checksums and upgrade documentation
+- [x] Native search keyboard and cached search results.
+- [x] Settings, diagnostics, account, and About screens.
+- [x] Source information including file size, seeds, and peers.
+- [ ] Cache-management screen and configurable storage limits.
+- [ ] Localization and accessibility review.
+- [ ] Automated host-side parser/demux tests in CI.
+- [ ] Signed release checksums and upgrade notes.
+- [ ] Extended memory, thermal, and multi-hour playback testing.

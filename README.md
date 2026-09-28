@@ -1,373 +1,81 @@
-# Stremio PS4
+# Stremio for PlayStation 4
 
-An experimental, community-built Stremio client for jailbroken PlayStation 4
-consoles. The project is currently entering **M2: catalogs and metadata**.
+<p align="center">
+  <img src="assets/branding/stremio-javascript-x-master.png" width="360" alt="Stremio PS4 logo with the JavaScript-X creator badge">
+</p>
 
-The installed PS4 application is titled **Stremio**. Its icon combines the
-official Stremio symbol with a small JavaScript-X creator badge; this remains
-an unofficial community client.
+<p align="center">
+  A native, controller-first Stremio client for jailbroken PlayStation 4 consoles.
+</p>
 
 > [!IMPORTANT]
-> This is an unofficial project and is not affiliated with or endorsed by
-> Stremio, Smart Code OOD, or Sony Interactive Entertainment. Use Stremio and
-> its addons only with media you are authorized to access.
+> This is an unofficial community project created by **Tahar Chtioui
+> ([@JavaScript-X](https://github.com/JavaScript-X))**. It is not affiliated
+> with or endorsed by Stremio, Smart Code OOD, Sony, or PlayStation. Only use
+> addons and media that you are legally authorized to access.
 
-## Current status
+## Project status
 
-The current hardware probe boots a native OpenOrbis application, initializes
-1920x1080 video output, renders a controller-friendly shell, verifies HTTPS,
-and can ask the PS4 AVPlayer to decode a packaged H.264 test clip. Packaging the
-probe asset isolates hardware decoding from
-the separate remote-stream transport path. Decoder textures use a dedicated
-GPU-visible direct-memory arena, as required by the PS4 AVPlayer ABI.
-Playback waits for AVPlayer's ready event before starting and uses its
-non-blocking frame query so the controller and timeout remain responsive. The
-video stream is enumerated and explicitly enabled before playback starts.
-Extended frame metadata supplies the real NV12 pitch, and the renderer writes
-rows directly into the framebuffer rather than calling a pixel function for
-every output pixel.
-Frame retrieval and NV12 conversion run on a worker thread so a blocking
-decoder call cannot reduce the 60 FPS controller and presentation loop.
-Shutdown joins that worker before stopping and closing AVPlayer, preventing a
-decoder/close race.
-Programmatic Home navigation is disabled because it is unstable on the tested
-firmware. The native PS button performs Home/background navigation safely.
-Version 2.80 provides a controller-driven Stremio catalog browser: bounded HTTPS
-downloads of Cinemeta catalogs, dependency-free parsing of paginated
-metadata previews, bounded poster downloads, and cached 310x410 JPEG rendering.
-Metahub poster requests explicitly select JPEG so WebP-backed catalog entries
-remain compatible with the small decoder used by the native client.
-Movie titles and navigation labels are rasterized directly into the native
-framebuffer, so the catalog no longer depends on notifications for identity.
-An animated top bar exposes Movies, Series, Public Domain, Search, and Settings
-through L1/R1. Catalogs load off the render thread and are cached per tab, so
-navigation remains responsive while purple Stremio placeholders appear
-immediately. The next row stays fixed and preloaded; pressing Down promotes it
-with a short bottom-to-top slide instead of continuously animating every card.
-Poster compositing uses contiguous scanline copies to keep menu rendering near
-60 FPS while selected cards retain a stable, non-flashing rounded focus frame.
-The left analog stick mirrors D-pad navigation. Search opens the native PS4
-system keyboard after consuming the opening Cross press, preventing that input
-from immediately closing the IME, and queries the canonical Cinemeta endpoint.
-Routine navigation no longer produces system-notification spam, and the
-unstable in-app exit command has been removed in favor of the PS4 menu. The interface now
-uses the bundled OFL-licensed Gontserrat font with anti-aliased text plus the
-official Stremio mark in the top bar. Settings contains local and cached-HTTPS
-playback diagnostics plus query reset and build information.
-Detail screens also show IMDb rating and genres. Series metadata exposes up to
-256 episodes with Left/Right episode navigation and Cross selection.
-The official Public Domain Movies addon is available as a third catalog. Its
-stream resources are parsed into a native results screen. Torrent descriptors
-and arbitrary direct HTTPS streams are identified as requiring the planned
-companion/cache bridge instead of being passed to AVPlayer's unsupported URL
-path. A separate legal remote Sintel probe downloads through the app's
-certificate-verified HTTPS client into persistent app storage and then feeds
-that local cache to AVPlayer. The first run downloads the 4.37 MB trailer and
-later runs reuse it. Playback now includes a native progress bar, elapsed/total
-clock, visible playing/paused state, and a live measured decoder-FPS counter.
-Packaged 360p, 720p, 1080p, and original-resolution Sintel variants provide
-repeatable hardware-decoder comparisons. The player supports five-second
-back/forward seeking and restart, and displays source resolution plus decoded
-frame count. Catalog, metadata, and encoded poster responses persist in
-`/data`; uncached posters are published individually instead of holding the
-whole catalog until every image finishes.
-The 2.51 hotfix discovers generated video-only MP4 streams by valid dimensions
-rather than relying on one stream-type value. Feathered navigation panels use
-pre-blended bands and lower-row posters use cached 90% textures, removing the
-per-pixel blending and scaling that reduced shell performance in 2.50.
-Version 2.52 expands AVPlayer's direct-memory texture arena for HD reference
-surfaces and uses Constrained Baseline, single-reference, no-B-frame 720p and
-1080p probes. It also fixes progressive-poster ownership when revisiting a
-cached tab and masks outgoing catalog rows below the navigation viewport.
-Version 2.60 keeps full-HD hardware decoding while reducing only its CPU debug
-preview to 640x360, moves pagination and poster work to a background prefetch,
-and adds lightweight tab lift and footer-shimmer animation. Search reports the
-console's native Enter-button assignment because Sony's system IME follows
-that setting for Cross/Circle behavior. Version 2.61 isolates playback tests
-from catalog download/JPEG workers, which otherwise competed with AVPlayer and
-distorted every resolution's measured FPS. It restores Sony's standard Search
-IME mode and leaves Cross, Square, Triangle, R2, and Circle entirely owned by
-the system keyboard while it is open.
-Version 2.62 removes per-frame AVPlayer source-dimension mutex queries, keeps
-the previously validated 720p conversion path, and reduces only the 1080p
-diagnostic surface to 480x270. The app now releases its pad handle before
-opening Sony's IME and reacquires it afterward, giving the system keyboard
-exclusive controller ownership for its standard button layout.
-Version 2.63 keeps infinite-scroll poster prefetch suspended for the complete
-AVPlayer lifetime, including its opening phase. This prevents the catalog's
-network, JPEG, and cache worker from silently restarting while a local or
-remote playback benchmark is running.
-Version 2.64 gives every playback test a bounded approximately 320x180 CPU
-diagnostic surface while AVPlayer continues decoding the full source. This
-removes the resolution-dependent scalar NV12-to-RGB workload from decoder-FPS
-comparisons: 360p, 480p, 720p, and 1080p now convert roughly the same pixels.
-Version 2.70 moves every playback diagnostic into Settings submenus for player
-mode and quality. Rendered RGB preview and Sony AVPlayer decode-only modes can
-now be compared at 360p, 480p, 720p, 1080p, and cached HTTPS 480p. A dedicated
-About screen credits Tahar Chtioui (`@JavaScript-X`), shows the bundled creator
-avatar, test platform, and public project repository.
-Version 2.71 adds a second true-24-FPS 1080p probe encoded as H.264 High Profile
-Level 4.1 at a lower bitrate. It remains alongside the Constrained Baseline
-Level 4.0 source, allowing real PS4 hardware to determine whether the 15 FPS
-frame-delivery cap is caused by the original stream profile rather than UI work.
-Version 2.72 adds an experimental Sony AVPlayer performance mode using the
-legacy frame API, a higher-priority AVPlayer worker, and twelve output buffers.
-It is decode-only until hardware testing proves that its 1080p frame delivery
-is faster and stable enough to become the basis of a visible renderer.
-Version 2.80 redesigns Search, Settings, movie/series details, and stream-source
-pages with larger hierarchy, rounded panels, readable badges, consistent
-footers, and fixed focus states. It also introduces a fourth, experimental
-direct Videodec2 GPU benchmark. That benchmark bypasses AVPlayer and MP4
-demuxing, feeds packaged Annex-B H.264 access units from coherent Onion memory,
-and reports the raw 1080p hardware-decoder rate. It is decode-only and does not
-install firmware-specific YUV VideoOut patches, keeping the 13.02 test safe.
-Version 2.81 registers the internal VdecCore dependency and retries Videodec2
-by sandbox-visible module name when firmware rejects its absolute path. It also
-joins AVPlayer's non-blocking frame worker before Stop/Close, preventing the
-frame-query versus teardown race observed when leaving player modes 1 and 2.
-Version 2.82 makes Circle return to the shell immediately while AVPlayer's
-owning worker completes Stop/Close asynchronously. The direct test now uses a
-Constrained Baseline Level 4.0 sequence with matching decoder profile/level and
-Onion-backed CPU work memory to address firmware 13.02 INVALID_SEQUENCE errors.
-Version 2.83 fixes the actual player-screen return flag for both rendered and
-decode-only AVPlayer modes. It also regenerates the direct Annex-B probe with
-the correct bitstream-filter order: SPS and PPS headers are now preserved and
-repeated with IDR frames instead of sending an undecodable headerless stream.
-Version 2.90 promotes direct Videodec2 to the default 1080p playback engine.
-Hardware-decoded NV12 frames are exposed through a cacheable mapping, converted
-to a 960x540 presentation surface, scaled to the 1080p display, and paced at
-the source's native 24 FPS. AVPlayer remains available as a compatibility test.
-Search and Settings now redraw both display buffers only when their state
-changes, preserving 60 FPS navigation without repeatedly rasterizing static UI.
-The playback pipeline keeps reusable conversion surfaces, transfers a preview
-only when a new decoded frame exists, and gives AVPlayer a six-frame output
-queue. These changes remove per-frame heap churn and redundant 60 Hz copies
-while keeping the interface and controller loop at 60 FPS.
-The PS4 release objects are compiled with `-O2`; this is essential for the
-scalar NV12-to-RGB conversion loop to sustain the test video's native 24 FPS
-on the console CPU. The build check prints the active release optimization so
-an accidental unoptimized package is visible in CI and local build logs.
-System termination now stops AVPlayer before joining its frame worker, then
-closes the decoder, IME, controller, HTTP, SSL, network, and user services in a
-single orderly path. Native-style colored PS button badges replace the old
-text-only control legends in screen-corner footers.
-Version 3.10 adds official device-link authentication under **Settings >
-Stremio Account and Synced Addons**. The PS4 shows a short
-`link.stremio.com` code, polls for approval without collecting a password,
-stores the returned account token in private app data, and synchronizes the
-account's addon collection. Movie and episode details query those endpoints
-through the standard Stremio `/stream` resource and present direct URLs and
-torrent descriptors in the native stream picker. Stremio addons remain remote
-HTTP services; the client never downloads or executes third-party addon code.
-Decoded audio is not implemented yet.
+Version **4.01** is under active development and has been tested on a real PS4
+running firmware **13.02 with GoldHEN**. It is not a finished consumer release.
+Back up important console data and expect compatibility differences between
+firmware, payload, media container, codec, and addon combinations.
 
-Version 3.11 makes addon stream results a true scrolling viewport, including
-position and more-results indicators. Torrent and HTTPS selection now opens a
-live preparation screen with connection/resolution stage, received and total
-megabytes when available, transfer speed, elapsed time, and demux status. The
-companion response timeout is extended from eight seconds to two minutes for
-initial peer discovery, and failures retain the native PS4 network error code
-instead of collapsing request creation and response waiting into stage 4.
+Working areas include:
 
-Version 3.12 adds an experimental progressive torrent path. Cross hands the
-companion's LAN HTTP source directly to Sony AVPlayer, allowing playback to
-begin while the companion continues downloading and permitting AVPlayer to
-probe containers such as MKV. Square retains the complete-cache path for MP4
-H.264 sources that need the smoother direct Videodec2 renderer. Progressive
-startup has a two-minute peer-discovery window and remains cancellable with
-Circle or Options.
+- Native 1920×1080 OpenOrbis interface with DualShock 4 navigation.
+- Android TV-inspired hero layout, expandable sidebar, and continuous catalog.
+- Movies, series, public-domain content, search, details, and episode selection.
+- Stremio device-link authentication and synchronized addon endpoints.
+- Cached posters, wallpapers, title logos, metadata, and stream results.
+- Torrent resolution through the official Stremio server on the local network.
+- Direct Videodec2 H.264 playback with companion HLS audio through AVPlayer.
+- Player HUD, pause, restart, fit/fill modes, and audio-sync adjustment.
+- Packaged playback diagnostics for 360p, 480p, 720p, and 1080p sources.
 
-Version 3.13 makes the complete-cache path cancellable. Circle aborts the
-active PS4 HTTP request, removes the partial cache file, and returns control
-without waiting for the full torrent. The experimental AVPlayer path remains
-available only as a compatibility diagnostic while native fragmented-MP4
-segment ingestion for Videodec2 is developed.
+Still planned or incomplete:
 
-Version 3.20 expands Search into an Android-TV-inspired discovery surface with
-Movies, Series, and Public Domain filter chips. Left/Right changes the filter,
-the native PS4 keyboard supplies the query, and as many as 24 cached results
-are presented through the same paged poster UI, metadata details, episode
-selection, addon stream resolver, and stream actions as the main catalogs.
-Public Domain filtering is performed locally against its addon catalog because
-that addon returns no server-side search results. Settings also includes a
-native 48 kHz signed-16-bit stereo HDMI tone test through `libSceAudioOut`,
-establishing the PS4 output path required before streamed audio demux and A/V
-synchronization are added.
+- Broad container and codec coverage, including reliable MKV/HEVC handling.
+- Subtitles, library synchronization, Continue Watching, and progress sync.
+- Multiple audio/subtitle-track selection and long-session recovery testing.
+- Compatibility testing across more PS4 firmware and jailbreak environments.
 
-Version 3.30 replaces the catalog's compact top strip with a persistent
-Android-TV-style navigation rail, stronger page hierarchy, wider poster rows,
-larger section titles, and unified Search and Settings surfaces. AudioOut now
-loads its required internal PS4 system module before initialization, fixing the
-`0x809b0001` test failure. Torrent sources expose two explicit actions:
-Cross starts segmented Videodec2 streaming, while Square retains the complete
-download path. The streaming path consumes the companion's HLS/fMP4 video
-playlist, converts each roughly ten-second fragment from length-prefixed AVC
-to Annex-B, alternates two bounded cache slots, and downloads the next fragment
-while Videodec2 plays the current one. This removes Sony AVPlayer and its
-firmware-specific stage-4 URL failure from progressive torrent playback.
+## Architecture at a glance
 
-Version 3.40 adds a focus-aware Android TV navigation rail that expands when
-selected and collapses over content. D-pad and left-stick Left enter it from
-the first catalog card, Up/Down select a section, and Right/Cross return to the
-page. Settings can switch between this rail and the classic top bar; the choice
-persists in app data. Stream cards now expose addon-supplied release details,
-file size, seed and peer counts before playback. Torrent resolution retries in
-the background and reports no-peers, network, codec, and fragmented-MP4
-failures separately. The AudioOut probe also tolerates an already-resident HEN
-module and no longer submits a null priming buffer.
+The PS4 application owns the interface, account/addon client, caching, input,
+and hardware playback. Torrent transport remains in the official Stremio server
+running on a PC or NAS. Addons remain remote HTTP services; the PS4 does not
+download or execute addon code.
 
-Version 3.50 redraws the navigation rail last so it remains a true full-height
-overlay on every Settings subpage, centers its labels and glyphs, and uses a
-rounded Stremio-purple selection pill. The bundled Gontserrat/Stremio typeface
-renders all application text, while controller hints now include a circular
-`L3` stick indicator. Direct Videodec2 allocates a deeper 16-frame decoded
-picture buffer and eight output surfaces for reordered B-frames in streaming
-encodes. AudioOut now treats `sceAudioOutOpen`, rather than the unreliable
-13.xx HEN initialization status, as the authoritative result of the test.
-
-Version 3.60 moves the catalog closer to Stremio for Android TV with a darker
-cinema surface, selected-title hero heading, content breadcrumbs, rounded
-search/status pill, recommendation row label, and stable selected-poster badge.
-The audio test now follows OpenOrbis' reference exactly by opening the main
-port as the system user (`0xFF`). Segmented playback extracts each fMP4
-sample's decode timestamp and composition offset, writes a timing sidecar, and
-passes the true DTS/PTS values to Videodec2 so B-frames are presented in the
-intended order instead of visibly stepping backward and forward.
-
-Version 3.70 freezes the validated media pipeline and concentrates on the TV
-experience. Catalogs now use six compact posters per row instead of four
-oversized cards, with balanced spacing, rounded artwork, a visible second-row
-preview, and a stable purple focus treatment. Settings use centered, compact
-pill rows instead of a large bright selection slab. Details gain a clear
-primary action, while the stream picker uses the same dark-purple focus and
-keeps all release information readable when selected.
-
-Version 3.71 is the performance hotfix for the six-card interface. Posters are
-decoded once at their exact 235x330 display size, next-row previews are cached
-at 211x297, and steady catalog, details, and stream-picker screens are rendered
-only into the two framebuffers when their state changes. Idle frames now flip
-the cached buffers without repeating CPU image scaling or text rasterization.
-
-Version 3.80 adds a persistent Android TV home-layout option alongside the
-compact grid. Android TV mode presents one bottom carousel, a selected-title
-hero panel, large cached artwork and the expandable left rail. Stream discovery
-runs off the render thread and shows an animated progress surface, so a slow
-addon no longer makes the app appear frozen. The bundled Stremio typeface is
-baked at twice the previous resolution in a 1024px atlas for sharper large
-headings while retaining state-based framebuffer caching for a 60 FPS shell.
-
-Version 3.90 rebuilds Android TV mode around a cached cinematic backdrop, an
-immediate selected-title synopsis and metadata hero, and one continuous
-horizontal poster rail. The left navigation opens and closes with a lightweight
-width animation, background artwork loads without blocking the shell, and
-routine successful playback notifications no longer obscure the interface.
-
-Version 3.91 consumes the controller press used to close the navigation rail,
-pre-renders hero backdrops at framebuffer size for smooth menu animation, and
-falls back to MetaHub artwork and title logos when catalog summaries omit them.
-The segmented Videodec2 path now starts the companion's HLS audio rendition in
-parallel through Sony AVPlayer so supported streams provide video and audio.
-
-Version 3.92 replaces Android TV paging with a continuous, animated horizontal
-carousel and only opens the sidebar at the true beginning of the catalog. Hero
-logos preserve their aspect ratio inside a bounded title area, transient
-wallpaper requests retry after catalog networking becomes idle, and the sidebar
-uses native film, television, play, search, and settings icons.
-
-Version 4.00 turns the stream flow into a reusable movie-player session. Addon
-results are cached persistently per title, the source picker has a modern
-six-row list and focused-source inspector, and teardown fully resets segment,
-decoder, audio, and preview state before another source starts. Companion audio
-now opens the declared master HLS manifest instead of an invalid bare rendition
-URL. The player adds a hideable HUD, fit/fill aspect modes, synchronized
-pause/restart, and 250 ms audio-sync controls while rendering each decoded frame
-into both cached framebuffers for a responsive 60 FPS controller loop.
-
-Controller controls:
-
-- **D-pad or left analog stick** moves through cards and vertical lists.
-- The default Movies catalog loads automatically at startup.
-- **R1** moves right and **L1** moves left through the five animated top tabs.
-- **Up/Down** continuously scrolls catalog pages and fetches more at the end.
-- **Triangle** explicitly reloads the active catalog and its posters.
-- **Cross** opens the focused item's metadata detail screen.
-- On Series details, **Left/Right** browses episodes and **Cross** requests
-  streams for the focused episode from synchronized addons.
-- **Circle** returns from details to the catalog.
-- **Square** runs the AVPlayer hardware-decoder probe. Success reports the
-  dimensions of the first decoded frame.
-- On Search, **Cross** opens the PS4 system keyboard. Its Search button submits
-  the query; **Triangle** repeats it and **Circle** clears or returns from results.
-- The Settings tab contains account/addon synchronization, companion setup,
-  and packaged and cached-HTTPS playback tests.
-- On a Public Domain detail page, **Cross** resolves addon streams. The stream
-  screen uses **Up/Down**, **Cross**, and **Circle**. Selecting a direct HTTPS
-  MP4 now downloads it incrementally to the persistent cache, demuxes its AVC
-  video track to Annex-B, and starts direct Videodec2 hardware playback.
-- Direct Videodec2 playback uses **Cross** to pause/resume, **Triangle** to
-  restart, and **Circle** to return. The player includes a progress bar and
-  live output/decode diagnostics.
-- **Circle** cancels an active AVPlayer probe.
-- After a successful decode, the video plays continuously as a centered
-  preview. **Cross** pauses/resumes and **Circle** stops and returns to the shell.
-- During playback, **Options** stops video and returns to the app shell. From
-  the shell it displays a reminder to use the native **PS button** to go Home.
-
-| Milestone | Scope | Status |
-| --- | --- | --- |
-| M0 | PKG, video output, diagnostics | Validated on PS4 FW 13.02 |
-| M1 | Controller, HTTPS, and local H.264 decode proof | Validated on PS4 FW 13.02 |
-| M2 | Stremio login, addon sync, catalogs, search and metadata | Console testing |
-| M3 | Cached HTTPS MP4/AVC stream selection and Videodec2 playback | Console testing |
-| M4 | Companion Stremio server integration | Console testing |
-| M5 | Library, progress sync, subtitles and settings | Planned |
-
-Version 3.10 still uses the configured companion transport for torrent-backed
-addon results. Moving BitTorrent transport fully onto PS4 is a separate native
-engine milestone; account login and addon discovery do not themselves provide
-the torrent engine.
-
-Version 3.02 supports direct HTTPS MP4 files with an H.264/AVC
-video track first. WebM, MKV, HEVC, DASH/HLS manifests, a built-in torrent
-engine, audio
-playback, subtitles, and protected streams are detected as future compatibility
-work; they are not silently treated as supported. Torrent-only addon results
-can be resolved by entering a Stremio streaming server on the same LAN in
-**Settings > Companion Server** (for example `192.168.1.50:11470`). The PS4
-then requests `/{infoHash}/{fileIdx}` from that server before demuxing the cached
-MP4. Cached media is capped at 1900 MiB per download.
-
-The official companion can be started on a PC with Docker:
-
-```sh
-docker compose -f docker-compose.companion.yml up -d
+```text
+Stremio account and addon services
+                |
+                v
+       Native PS4 application
+       UI / cache / Videodec2
+                |
+                v
+ Official Stremio companion on LAN
+ torrent resolution / HLS delivery
 ```
 
-Allow TCP port `11470` through the PC firewall, find the PC's LAN IPv4 address,
-and enter `IP:11470` in the PS4 app. Keep the companion running while the PS4
-resolves a torrent. Only use sources that you are legally permitted to access.
+See [Architecture](docs/architecture.md) for component and trust-boundary
+details, [Roadmap](docs/roadmap.md) for priorities, and
+[Console testing](docs/testing-m0.md) for the real-hardware checklist.
 
-See [docs/architecture.md](docs/architecture.md) for the intended design and
-[docs/testing-m0.md](docs/testing-m0.md) for the first console test.
+## Requirements
 
-## Prerequisites
+- A jailbroken PS4 capable of installing homebrew PKGs.
+- GoldHEN or another compatible homebrew environment.
+- Docker Desktop for the recommended reproducible build.
+- The official Stremio server on a PC/NAS for torrent-backed streams.
+- A legally obtained OpenOrbis toolchain when building without Docker.
 
-- A jailbroken PS4 capable of installing homebrew PKGs
-- The [OpenOrbis PS4 Toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain)
-- A Linux environment or WSL with LLVM 18 (`clang-18`, `clang++-18`,
-  `ld.lld-18`) and `make`
-- `OO_PS4_TOOLCHAIN` pointing to the OpenOrbis toolchain root
-
-The build uses OpenOrbis' `_common/graphics.cpp` at compile time. No OpenOrbis
-binaries or Sony SDK files are committed to this repository.
+No Sony SDK files or credentials are included in this repository.
 
 ## Build
 
 ### Reproducible Docker build
-
-Docker Desktop is the recommended build path on Windows. The image downloads
-the official OpenOrbis v0.5.4 LLVM 18 archive and verifies its published
-SHA-256 before extracting it.
 
 ```powershell
 ./scripts/fetch-openorbis.ps1
@@ -376,42 +84,86 @@ docker compose run --rm builder
 docker compose run --rm packager
 ```
 
+The package is written to:
+
+```text
+dist/IV0000-BREW00100_00-STREMIOPS4000000.pkg
+```
+
 ### Existing OpenOrbis installation
 
 ```sh
 export OO_PS4_TOOLCHAIN=/path/to/OpenOrbis-PS4-Toolchain
 make check
 make
+make package
 ```
 
-The builder produces the signed package metadata and executable. The packager
-uses OpenOrbis' official compatibility image for its legacy SSL/ICU runtime.
-The expected package is:
+The build uses OpenOrbis `_common/graphics.cpp` and runtime assets from the
+configured toolchain. If your installation uses different paths, provide
+`RIGHT_SPRX` and `ICON0` explicitly to `make`.
 
-```text
-dist/IV0000-BREW00100_00-STREMIOPS4000000.pkg
-```
+## Companion server
 
-The package step needs the standard OpenOrbis runtime files at:
-
-```text
-$OO_PS4_TOOLCHAIN/samples/_common/sce_sys/about/right.sprx
-$OO_PS4_TOOLCHAIN/samples/_common/sce_sys/icon0.png
-```
-
-`assets/sintel-trailer.mp4` is the normal-motion Sintel trailer mirrored by W3C
-and is included only as a deterministic playback test. Sintel is copyright
-Blender Foundation and distributed under Creative Commons Attribution 3.0.
-
-Some OpenOrbis releases arrange these assets differently. If `make check`
-reports a missing path, set `RIGHT_SPRX` or `ICON0` explicitly:
+Start the official Stremio server on a computer connected to the same network:
 
 ```sh
-make RIGHT_SPRX=/path/to/right.sprx ICON0=/path/to/icon0.png
+docker compose -f docker-compose.companion.yml up -d
 ```
+
+Allow TCP ports `11470` and `12470` through the computer firewall. In the PS4
+application, open **Settings → Companion Server** and enter the computer's LAN
+address, for example `192.168.1.50:11470`. Keep the companion available while
+resolving and streaming torrent-backed sources.
+
+## Controls
+
+### Catalog and navigation
+
+- **D-pad / left analog stick:** navigate menus, catalogs, and lists.
+- **Left at the beginning of a catalog:** open the sidebar.
+- **Right / Cross in the sidebar:** close it and return to content.
+- **L1 / R1:** change the active main section.
+- **Cross:** open the selected title, episode, setting, or stream.
+- **Circle:** return to the previous screen.
+- **Triangle:** reload supported catalog/search data.
+
+### Player
+
+- **Cross:** pause or resume.
+- **Triangle:** restart.
+- **Square:** show or hide the player HUD.
+- **Up:** switch between fit and fill presentation.
+- **L1 / R1:** move audio synchronization by −250/+250 ms.
+- **Circle:** stop playback and return.
+
+## Data and privacy
+
+Account tokens, cached metadata, artwork, stream results, and settings are
+stored in the application's private `/data` directory. Tokens must never be
+committed or included in diagnostic reports. Addon responses and media URLs are
+untrusted and are processed with bounded downloads and scheme checks.
+
+## Test media and third-party material
+
+The packaged Sintel clips are deterministic decoder tests. Sintel is copyright
+Blender Foundation and distributed under Creative Commons Attribution 3.0.
+The bundled Gontserrat font is distributed under the SIL Open Font License.
+Stremio and PlayStation names and marks belong to their respective owners.
 
 ## Contributing
 
-Keep changes focused and never commit credentials, copyrighted media, official
-Sony SDK material, or generated PKGs. Test reports should include the firmware,
-payload/loader, visible result, and the final diagnostic lines.
+Keep changes focused, document hardware results, and never commit credentials,
+copyrighted commercial media, Sony SDK files, generated PKGs, or private keys.
+A useful report includes firmware, jailbreak version, package checksum, source
+type, codec/container, visible behavior, FPS, and exact diagnostic error code.
+
+## License
+
+This repository is **source-available**, not open source under the OSI
+definition. It uses the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Attribution and preservation of the required notice are mandatory. Commercial
+use—including selling the software or incorporating it into a commercial
+product or service—is not permitted without separate written permission from
+Tahar Chtioui. For commercial licensing requests, contact
+[@JavaScript-X](https://github.com/JavaScript-X).

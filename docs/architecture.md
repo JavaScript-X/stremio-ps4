@@ -1,51 +1,98 @@
 # Architecture
 
-## Direction
+## Design goals
 
-Stremio PS4 is a native, controller-first client rather than a port of the Qt
-desktop shell. The native client owns presentation, input, persistence, and
-playback. Stremio's public HTTP services and addon protocol provide catalogs,
-metadata, streams, subtitles, library state, and progress synchronization.
+Stremio PS4 is a native OpenOrbis application, not a Qt, Electron, Android, or
+web-wrapper port. The design prioritizes controller navigation, predictable
+memory use, bounded network input, hardware decoding, and recovery on real PS4
+homebrew environments.
+
+## Runtime overview
 
 ```text
-PS4 native application
-  UI and controller navigation
-  Stremio API/addon client
-  Playback adapter
-        |
-        +--- direct HTTP/HLS media
-        |
-        +--- LAN companion service
-                torrent resolution
-                transcoding/remuxing
-                HTTP media delivery
+┌──────────────────────────────── PS4 application ────────────────────────────┐
+│                                                                            │
+│  UI / focus model ── Catalog + metadata ── Account + addon transport       │
+│         │                      │                         │                   │
+│         └──────── Cache and private application data ───┘                   │
+│                                │                                           │
+│                    Playback session coordinator                            │
+│                      │                    │                                │
+│                 Videodec2             AVPlayer                             │
+│                 H.264 video           HLS audio / compatibility tests      │
+│                                                                            │
+└───────────────────────────────────┬────────────────────────────────────────┘
+                                    │ HTTP on the local network
+                                    v
+                    Official Stremio companion server
+                     torrent resolution and HLS delivery
 ```
 
-## Why a companion service comes first
+## Major components
 
-Many addon results are not immediately playable by a console media pipeline.
-Running the official Stremio server on a PC or NAS lets the first useful PS4
-release consume ordinary HTTP media while torrent handling, remuxing, and
-transcoding remain off-console. A later milestone can investigate porting more
-of the service once native playback is stable.
+### Native shell
 
-## Modules
+`src/main.cpp` owns application state, DualShock input, view transitions,
+asynchronous jobs, persistent settings, and coordination between browsing and
+playback. Static views are rendered into both framebuffers only when state
+changes; idle frames reuse those buffers to keep input and presentation at
+60 Hz.
 
-- `platform`: PS4 video, audio, controller, clock, storage, and networking
-- `ui`: focus model, views, reusable TV components, and accessibility
-- `stremio`: authentication, API models, addon transport, and synchronization
-- `player`: media capability inspection, direct playback, and server fallback
-- `persistence`: settings, cached images, tokens, and playback recovery
-- `diagnostics`: structured logs and a user-visible support report
+### Rendering and artwork
 
-Platform-specific code must remain behind narrow interfaces so protocol and UI
-logic can be tested on a development computer without a PS4.
+`src/graphics.*` provides the small immediate-mode 2D renderer. `src/poster.*`
+decodes and prepares posters, wallpapers, and title logos. Catalog artwork is
+cached under `/data`, and hero images are prepared off the render thread at
+their display size to avoid expensive scaling during navigation animations.
 
-## Security boundaries
+### Stremio resources
 
-- Credentials and access tokens must never be written to logs.
-- HTTPS certificate verification must not be disabled in release builds.
-- Addon data and URLs are untrusted input and require size and scheme checks.
-- The application must not execute addon-provided code.
-- Local companion-service access should be explicitly configured or paired.
+`src/catalog.*` parses bounded catalog, metadata, episode, and stream responses.
+Authentication uses Stremio's device-link flow. Synchronized addon URLs remain
+remote services: addon code is never installed or executed on the console.
 
+### Playback
+
+- `src/videodec2.*` submits Annex-B H.264 access units to PS4 Videodec2 and
+  exposes decoded frames for the native framebuffer.
+- `src/fmp4_stream.*` converts the companion's fragmented-MP4 video segments
+  into the Annex-B format expected by Videodec2 while preserving timing.
+- `src/avplayer.*` supports Sony AVPlayer diagnostics and the companion's HLS
+  audio rendition.
+- `src/mp4_demux.*` extracts supported AVC tracks from complete cached MP4
+  files.
+
+The segmented player alternates bounded cache slots and prepares the next
+fragment while the current fragment plays. Session teardown owns every worker,
+decoder, audio handle, and preview surface so another source can start cleanly.
+
+## Persistence
+
+Private application storage contains:
+
+- Stremio authentication and synchronized addon configuration.
+- UI/navigation settings and companion address.
+- Posters, wallpapers, title logos, metadata, and stream-result caches.
+- Bounded media and elementary-stream cache files.
+
+Secrets must never be written to logs or committed to the repository.
+
+## Trust boundaries
+
+- Catalogs, addon responses, URLs, playlists, images, and media are untrusted.
+- Remote reads must enforce scheme, response-size, and timeout limits.
+- Release HTTPS requests must retain certificate verification.
+- The client must never execute addon-provided code.
+- The companion address is explicitly configured by the user.
+- Commercial or protected media is outside the project's test fixtures.
+
+## Performance rules
+
+- Network access, JPEG/PNG decoding, and media preparation stay off the render
+  thread.
+- Static screens redraw only after state changes.
+- Images are decoded once at their intended presentation dimensions.
+- Both PS4 framebuffers receive each new video frame to prevent stale-frame
+  alternation while input and flips continue at 60 Hz.
+- Playback stops catalog prefetch workers that would compete for CPU, network,
+  or Sony service resources.

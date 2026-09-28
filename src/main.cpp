@@ -602,7 +602,7 @@ void drawSettings(Scene2D& scene, int selected, int indicatorX) {
             "NAVIGATION LAYOUT  CLASSIC TOP BAR",
         androidTvMode ? "HOME LAYOUT  ANDROID TV" :
             "HOME LAYOUT  COMPACT GRID",
-        "ABOUT STREMIO  v4.00"};
+        "ABOUT STREMIO  v4.01"};
     drawSettingsRows(scene, rows, 8, selected, indicatorX,
         "SETTINGS", "OPEN");
 }
@@ -812,7 +812,7 @@ void drawAbout(Scene2D& scene, int indicatorX) {
     scene.DrawText(560, 705,
         "STREMIO IS A TRADEMARK OF ITS RESPECTIVE OWNER.", muted, 2);
     scene.DrawText(560, 750,
-        "THIS PROJECT IS INDEPENDENT AND OPEN SOURCE.", muted, 2);
+        "SOURCE AVAILABLE FOR NONCOMMERCIAL USE.", muted, 2);
     scene.DrawVerticalFade(0, 930, kWidth, 150, panel, 0, 230);
     drawButtonHint(scene, 1640, 1020, 'O', "BACK");
     drawStickHint(scene, 360, 1015, "NAVIGATE");

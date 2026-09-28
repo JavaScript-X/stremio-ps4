@@ -1,74 +1,97 @@
-# M0 console test
+# Real-hardware test guide
 
-## Validated result
+## Reference environment
 
-M0 was validated on a jailbroken PS4 running firmware 13.02 with HEN. The
-package installed successfully, initialized the active controller, presented
-stable native 1920x1080 double-buffered output, remained responsive, and
-returned to the home screen with the Options button without crashing.
+- Console: PlayStation 4
+- Firmware: 13.02
+- Homebrew payload: GoldHEN
+- Current package line: 4.x
 
-Validated package version: `1.02`
+Earlier milestone packages established installation, native VideoOut,
+controller input, HTTPS, AVPlayer, AudioOut, and Videodec2 operation. New test
+reports should use the complete checklist below instead of repeating only the
+original M0 launch test.
 
-Validated source commit: `a2654f8`
+## Before testing
 
-## M1 follow-up validation
+1. Build from a clean checkout.
+2. Record the Git commit and SHA-256 of the PKG.
+3. Install the new package over the previous build.
+4. Confirm the version shown under **Settings → About**.
+5. Start the companion server when testing torrent-backed sources.
 
-Package version `1.04` was validated on the same firmware 13.02/HEN console:
+## Smoke test
 
-- Left/Right moved focus across all four cards.
-- Cross activated the focused card and displayed confirmation.
-- Triangle completed a certificate-verified request to `www.stremio.com` with
-  HTTP status 200.
-- Options returned to the PS4 home screen.
-- No crashes were observed.
+1. Launch the application and leave it idle for 30 seconds.
+2. Confirm the shell remains responsive and near 60 FPS.
+3. Navigate every sidebar section with D-pad and left analog stick.
+4. Open and close the sidebar; verify that the closing input is not repeated on
+   the underlying catalog.
+5. Move continuously across more than six posters in both directions.
+6. Open details, return, background with the PS button, and resume.
 
-## Goal
+## Network and account test
 
-Prove that the package launches, allocates two 1080p framebuffers, and presents
-frames correctly on the target console before adding input and networking.
+1. Link a Stremio account through the device-code screen.
+2. Confirm synchronized addon count is nonzero.
+3. Open Movies, Series, Public Domain, and Search.
+4. Confirm cached artwork appears after revisiting a catalog.
+5. Search for a movie and open its normal details and stream flow.
 
-## Procedure
+Never include an authentication token or private addon URL in a report.
 
-1. Build the PKG from a clean checkout.
-2. Install it through the PS4 Debug Settings package installer.
-3. Launch **Stremio PS4** from the home screen.
-4. Wait at least 30 seconds and observe whether the image remains stable.
-5. Close the application using the PS button.
+## Stream and player test
 
-## Expected result
+1. Request streams and note lookup time and source count.
+2. Record the selected source's container, codec, size, seeds, and peers.
+3. Start playback and record buffering time.
+4. Confirm video cadence and whether audio starts and remains synchronized.
+5. Test pause/resume, restart, HUD toggle, fit/fill, and audio offset.
+6. Stop playback, select a different source, and start playback again.
+7. Reopen the same title and verify cached stream results appear immediately.
+8. Stop with Circle and close from the PS4 system menu.
 
-The display shows a dark background, left navigation rail, purple header bars,
-and four gray poster placeholders. There should be no flickering or system
-error dialog.
+## Performance observations
+
+Distinguish these measurements:
+
+- Shell/input FPS: expected to remain at the display loop's 60 Hz.
+- Source frame rate: commonly 24, 25, or 30 FPS for movies.
+- Decoder FPS: should meet or exceed the source cadence.
+- Transfer speed: depends on source peers, network, and companion storage.
+
+A 24 FPS film is not expected to contain 60 unique video frames per second;
+the UI and controller loop can still operate at 60 Hz.
 
 ## Report template
 
 ```text
-Firmware: 13.02
-Jailbreak/payload:
-Loader version:
-PKG checksum:
-Launch result:
-Visible output:
-Stable for 30 seconds: yes/no
-How the app was closed:
-Diagnostic output:
+Commit:
+Package version:
+PKG SHA-256:
+PS4 model and firmware:
+Payload and version:
+Companion platform/version:
+Connection: Ethernet/Wi-Fi
+Screen or action tested:
+Source container/codec/resolution/FPS:
+Shell FPS:
+Decoder FPS:
+Audio result and sync:
+Second-stream restart result:
+Exact stage/error code:
+Steps to reproduce:
 Photo/video link (optional):
 ```
 
-## M1 AVPlayer validation
+## Known diagnostic meaning
 
-Package version `1.10` was validated on the firmware 13.02 console. Pressing
-Square opened the packaged Mozilla CC0 MP4, completed AVPlayer's ready-event
-handshake, enabled the video stream, and retrieved a decoded H.264 frame. The
-reported output was `decoded frame 960x540` and appeared almost immediately.
+- AVPlayer stage 4: source rejected during `sceAvPlayerAddSource`; verify the
+  URL, manifest, transport, and format.
+- Videodec2 stage errors: record stage, native code, and submitted access-unit
+  count.
+- Companion/no-peer errors: retry another source before treating the player as
+  broken.
 
-This validates package file access, MP4 demuxing, H.264 hardware decoding,
-GPU-visible decoder allocation, and decoded-frame retrieval. Displaying those
-NV12 frames and consuming decoded audio remain separate follow-up work.
-
-Package version `1.11` additionally displayed a centered 480x270 flower image
-converted from the decoded NV12 frame. Circle returned to the shell and Options
-returned Home. Resuming that backgrounded instance exposed stale VideoOut state,
-so version `1.12` changes Options to stop playback and exit cleanly after the
-Home navigation request.
+Testing should use public-domain, freely licensed, or personally authorized
+media only.
