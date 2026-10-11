@@ -19,7 +19,7 @@
 ## Project status
 
 Version **9.10** continues the PS5-to-PS4 port and is under active development on
-the `codex/stremio-ps5-to-ps4-port` branch. It has been built
+the `codex/ps4-port` branch. It has been built
 for a real PS4
 running firmware **13.02 with GoldHEN**. It is not a finished consumer release.
 Back up important console data and expect compatibility differences between
@@ -187,7 +187,7 @@ type, codec/container, visible behavior, FPS, and exact diagnostic error code.
 
 ## License
 
-The PS5-to-PS4 derivative on `codex/stremio-ps5-to-ps4-port` is licensed under
+The PS5-to-PS4 derivative on `codex/ps4-port` is licensed under
 **GNU GPL v3.0 or later**; see [COPYING.PS5-PORT](COPYING.PS5-PORT). The
 historical original PS4 work remains covered by its root [PolyForm license](LICENSE).
 See [PS5 port credits](PS5_PORT_CREDITS.md) for the required upstream
