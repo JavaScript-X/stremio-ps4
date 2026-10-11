@@ -1,0 +1,20 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+This PS5-to-PS4 port branch is distributed under the GNU General Public
+License version 3 or, at your option, any later version.
+
+The complete license text is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
+
+Copyright (C) 2026 Sp9nky and contributors to unofficial-stremio-ps5-port
+Copyright (C) 2026 Tahar Chtioui (JavaScript-X), PS4 adaptation
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for details.
+
+The PolyForm license in the root LICENSE describes the original PS4 project
+history. The compiled derivative on branch codex/stremio-ps5-to-ps4-port,
+including src/ps5port, is governed by GPL-3.0-or-later because it adapts the
+GPL-licensed PS5 project identified below.

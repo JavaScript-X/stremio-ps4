@@ -1,0 +1,5 @@
+Repository: https://github.com/Sp9nky/unofficial-stremio-ps5-port
+Commit: 286445df3e01a7f8d40d7c757b84e86980bdd0a5
+Imported: 2026-10-11
+
+This branch retains the upstream source and adds the PS4/OpenOrbis adaptation.

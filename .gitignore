@@ -1,17 +1,24 @@
-# Build output (build.sh writes dist/; release files go to GitHub Releases)
-dist/
-dist-native/
+# OpenOrbis build outputs
+.cache/
 build/
-*.ffpfsc
-*.zip
+dist/
+eboot.bin
+pkg.gp4
+*.pkg
+*.elf
+*.oelf
+*.o
 
-# Downloaded on first use by tools/make_dds.ps1
-tools/texconv.exe
+# Local playback fixtures are intentionally not part of the source repository.
+assets/*.mp4
+assets/*.h264
 
-# Editors and OS
-.vscode/
+# A local comparison snapshot may be present, but the fork already retains the
+# complete upstream source at the repository root.
+vendor/
+
+# IDE and OS files
 .idea/
-*.swp
+.vscode/
 .DS_Store
 Thumbs.db
-desktop.ini

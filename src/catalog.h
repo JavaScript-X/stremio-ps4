@@ -1,0 +1,60 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct CatalogItem {
+    std::string id;
+    std::string name;
+    std::string poster;
+    std::string background;
+    std::string logo;
+    std::string description;
+    std::string releaseInfo;
+    std::string runtime;
+    std::string imdbRating;
+    std::string genres;
+};
+
+struct MetaDetails {
+    struct Episode {
+        std::string id;
+        std::string title;
+        int season = 0;
+        int episode = 0;
+    };
+
+    std::string id;
+    std::string name;
+    std::string description;
+    std::string releaseInfo;
+    std::string runtime;
+    std::string imdbRating;
+    std::string genres;
+    std::vector<Episode> episodes;
+};
+
+struct StreamItem {
+    std::string name;
+    std::string title;
+    std::string url;
+    std::string infoHash;
+    std::string fileName;
+    uint64_t videoSize = 0;
+    int seeders = -1;
+    int peers = -1;
+    int fileIndex = -1;
+};
+
+bool parseCatalogItems(
+    const std::string& json,
+    std::vector<CatalogItem>& items,
+    size_t maximumItems);
+
+bool parseMetaDetails(const std::string& json, MetaDetails& details);
+bool parseStreamItems(
+    const std::string& json,
+    std::vector<StreamItem>& streams,
+    size_t maximumItems);
